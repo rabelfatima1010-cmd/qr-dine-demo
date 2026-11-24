@@ -1,0 +1,5 @@
+# private: the database version used as the base for client builds
+full-version/
+# local test files
+_test/
+__pycache__/

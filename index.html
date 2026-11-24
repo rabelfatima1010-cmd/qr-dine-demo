@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>QR Dine · Smart Restaurant Ordering (Demo)</title>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app"></div>
+<div id="modal-root"></div>
+<div id="toast"></div>
+
+<script>
+/* =========================================================
+   CONFIG: edit these with your own details
+   ========================================================= */
+const DEVELOPER = {
+  name: 'YourBrand Digital',   // shows as "Powered by ..." and on the upgrade screen
+  whatsapp: '',                // e.g. '923001234567' (country code, no + or spaces)
+  instagram: '',               // e.g. 'yourbrand' (without @)
+  email: ''                    // e.g. 'hello@yourbrand.com'
+};
+// Access code: anyone can look around; placing orders and editing need the code you share by DM.
+// Default code: QRDINE-2026 (not case-sensitive). Change it with: python scripts/set_access_code.py NEW-CODE
+const ACCESS_CODE_SHA256 = '1f241f913de611a5ae8435f5df28845b7f810a6c5a1b0e019c43a4129e80846f';
+const DM_KEYWORD = 'QRDINE';
+// Demo limits
+const LIMITS = { tables: 5, menuItems: 15, ordersPerDay: 20 };
+const KEY = 'qrdine_demo_v2';
+
+/* ---------- helpers ---------- */
+const uid = () => Math.random().toString(36).slice(2, 10);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const dayKey = (t = Date.now()) => new Date(t).toDateString();
+const money = n => { const v = Math.round(n * 100) / 100, c = S.settings.currency; return (c.length > 1 ? c + ' ' : c) + v.toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(v) ? 0 : 2, maximumFractionDigits: 2 }); };
+const ago = t => { const m = Math.floor((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.floor(m / 60) + ' h ago'; };
+const greet = () => { const h = new Date().getHours(); return h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening'; };
+const starStr = n => '★'.repeat(n) + '<span class="soff">' + '★'.repeat(5 - n) + '</span>';
+const STEPS = ['new', 'preparing', 'ready', 'served'];
+const STEP_LABEL = { new: 'Received', preparing: 'Preparing', ready: 'Ready', served: 'Served', cancelled: 'Cancelled' };
+const PAY_LABEL = { online: 'Online', cash: 'Cash at table', counter: 'Counter' };
+const CALL_LABEL = { waiter: '🙋 is calling a waiter', bill: '🧾 asked for the bill', cash: '💵 wants to pay cash', counter: '🏪 will pay at counter' };
+
+/* ---------- data ---------- */
+function seed() {
+  const m = (name, cat, price, emoji, desc) => ({ id: uid(), name, cat, price, emoji, desc, available: true });
+  return {
+    v: 1,
+    settings: { name: 'The Corner Bistro', tagline: 'Burgers · Pasta · Coffee', wifiName: 'CornerBistro_Guest', wifiPass: 'enjoy2026', currency: '$', taxPct: 0 },
+    menu: [
+      m('Crispy Calamari', 'Starters', 9.5, '🦑', 'Lemon aioli & fresh herbs'),
+      m('Caesar Salad', 'Starters', 8.9, '🥗', 'Romaine, parmesan, croutons, house dressing'),
+      m('Tomato Basil Soup', 'Starters', 6.5, '🍅', 'Served with toasted sourdough'),
+      m('Classic Cheeseburger', 'Mains', 12.9, '🍔', 'Beef patty, cheddar, pickles, fries on the side'),
+      m('Margherita Pizza', 'Mains', 13.5, '🍕', 'San Marzano tomato, mozzarella, basil'),
+      m('Chicken Alfredo Pasta', 'Mains', 14.9, '🍝', 'Creamy parmesan sauce, grilled chicken'),
+      m('Grilled Salmon', 'Mains', 18.9, '🐟', 'Lemon butter, seasonal vegetables'),
+      m('Steak Frites', 'Mains', 21.5, '🥩', 'Sirloin, peppercorn sauce, crispy fries'),
+      m('Fresh Lemonade', 'Drinks', 4.5, '🍋', 'Squeezed to order'),
+      m('Cappuccino', 'Drinks', 3.9, '☕', 'Double shot, steamed milk'),
+      m('Virgin Mojito', 'Drinks', 5.5, '🍹', 'Mint, lime & soda'),
+      m('Chocolate Brownie', 'Desserts', 6.5, '🍫', 'Warm, with vanilla ice cream')
+    ],
+    tables: [1, 2, 3].map(num => ({ id: uid(), num })),
+    orders: [], calls: [],
+    reviews: [
+      { id: uid(), orderId: null, table: 2, rating: 5, text: 'The burger was amazing and ordering with the QR code was super easy!', at: Date.now() - 86400000 },
+      { id: uid(), orderId: null, table: 1, rating: 4, text: 'Quick service. The pasta could have been a little warmer.', at: Date.now() - 2 * 86400000 }
+    ],
+    staff: [
+      { id: uid(), name: 'Alex Morgan', role: 'Waiter', phone: '+1 555 0101', active: true },
+      { id: uid(), name: 'Sara Khan', role: 'Cashier', phone: '+1 555 0102', active: true },
+      { id: uid(), name: 'Daniel Lee', role: 'Chef', phone: '+1 555 0103', active: true }
+    ]
+  };
+}
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return s; } catch (e) {}
+  const s = seed(); localStorage.setItem(KEY, JSON.stringify(s)); return s;
+}
+let S = load();
+function commit(fn) { S = load(); fn(S); localStorage.setItem(KEY, JSON.stringify(S)); render(); }
+const todaysOrders = () => S.orders.filter(o => dayKey(o.at) === dayKey());
+const ordersLeft = () => LIMITS.ordersPerDay - todaysOrders().length;
+
+/* live sync between tabs */
+let pending = false;
+function safeRender() {
+  const a = document.activeElement;
+  if (document.querySelector('#modal-root form') || (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName))) { pending = true; return; }
+  render();
+}
+addEventListener('storage', e => { if (e.key === KEY || e.key === null) { S = load(); safeRender(); } });
+document.addEventListener('focusout', () => setTimeout(() => {
+  if (pending && !document.querySelector('#modal-root form') && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) { pending = false; render(); }
+}, 60));
+setInterval(() => { if (route().view !== 'home') safeRender(); }, 30000);
+
+/* ---------- routing ---------- */
+function route() { const p = location.hash.replace(/^#\/?/, '').split('/'); return { view: p[0] || 'home', arg: p[1], sub: p[2] }; }
+addEventListener('hashchange', () => { closeModal(); render(); scrollTo(0, 0); });
+function render() {
+  const r = route();
+  document.body.className = 'v-' + r.view;
+  const app = document.getElementById('app');
+  if (r.view === 'table') { app.innerHTML = viewCustomer(parseInt(r.arg, 10)); document.title = `Table ${r.arg} · ${S.settings.name}`; }
+  else if (r.view === 'kitchen') { app.innerHTML = viewKitchen(); kitchenAlert(); }
+  else if (r.view === 'admin') { app.innerHTML = viewAdmin(); document.title = `Dashboard · ${S.settings.name}`; }
+  else { app.innerHTML = viewHome(); document.title = `${S.settings.name} · Smart QR Ordering`; }
+}
+
+/* ---------- UI bits ---------- */
+function modal(html, cls = '') {
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `<div class="overlay"><div class="modal ${cls}"><button class="x" data-a="close" aria-label="Close">×</button>${html}</div></div>`;
+  root.firstChild.addEventListener('click', e => { if (e.target === root.firstChild) closeModal(); });
+}
+function closeModal() { document.getElementById('modal-root').innerHTML = ''; if (pending) { pending = false; render(); } }
+function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2400); }
+
+/* =========================================================
+   HOME
+   ========================================================= */
+function viewHome() {
+  const n = S.tables[0]?.num || 1;
+  return `<div class="home"><div class="home-in">
+    <span class="pill">✨ Interactive demo · try everything</span>
+    ${unlocked ? '' : `<div class="notice" style="margin:16px auto 0;max-width:620px">🔒 Look around freely. To place orders and make changes, <a href="#" data-a="unlock"><b>enter the access code</b></a>. No code? DM us "${DM_KEYWORD}"${DEVELOPER.instagram ? ` on Instagram <b>@${esc(DEVELOPER.instagram)}</b>` : ''}.</div>`}
+    <h1>${esc(S.settings.name)}<br><span>Smart QR Ordering System</span></h1>
+    <p class="muted">Every table gets its own QR code. Guests scan it to see the menu, order, call a waiter, pay and leave a review, all from their phone.</p>
+    <div class="home-grid">
+      <a class="hcard" href="#/table/${n}" target="_blank"><div class="ic">📱</div><h3>Customer view</h3><p>What guests see after scanning the QR on Table ${n}</p></a>
+      <a class="hcard" href="#/kitchen" target="_blank"><div class="ic">👨‍🍳</div><h3>Kitchen screen</h3><p>Orders and waiter calls arrive live</p></a>
+      <a class="hcard" href="#/admin"><div class="ic">📊</div><h3>Owner dashboard</h3><p>Menu, prices, tables, orders, staff & sales</p></a>
+    </div>
+    <div class="feat"><span>📋 Digital menu</span><span>🛒 Table ordering</span><span>🙋 Call waiter</span><span>📶 WiFi password</span><span>👨‍🍳 Kitchen display</span><span>💳 Online / cash / counter pay</span><span>⭐ Reviews</span><span>📊 Daily sales</span></div>
+    <p class="muted small" style="margin-top:22px">Tip: open the customer view and the kitchen screen in two tabs side by side, then place an order and watch it arrive.</p>
+    <div class="card" style="margin-top:22px;text-align:center"><h3 style="margin-bottom:6px">Like what you see?</h3><p class="muted" style="margin:0 0 12px">We build a version made for your restaurant: your brand, your menu, your payment methods and any feature you need.</p><button class="btn-brand" data-a="upgrade">Get your custom version →</button></div>
+  </div></div>`;
+}
+
+/* =========================================================
+   CUSTOMER (table) VIEW
+   ========================================================= */
+const cust = { cat: 'All', cart: {}, tab: 'menu', table: null, note: '' };
+function cartTotal() { return Object.entries(cust.cart).reduce((a, [id, q]) => { const m = S.menu.find(x => x.id === id); return a + (m ? m.price * q : 0); }, 0); }
+function viewCustomer(num) {
+  const table = S.tables.find(t => t.num === num);
+  if (!table) return `<div class="cust"><div class="card center" style="margin:60px 16px"><div class="bigic">🤔</div><h3>Table not found</h3><p class="muted">Please scan the QR code on your table again.</p></div></div>`;
+  if (cust.table !== num) Object.assign(cust, { table: num, cart: {}, tab: route().sub === 'orders' ? 'orders' : 'menu', cat: 'All', note: '' });
+  const cats = ['All', ...new Set(S.menu.map(m => m.cat))];
+  if (!cats.includes(cust.cat)) cust.cat = 'All';
+  const items = S.menu.filter(m => cust.cat === 'All' || m.cat === cust.cat);
+  const mine = todaysOrders().filter(o => o.table === num).sort((a, b) => b.at - a.at);
+  const count = Object.values(cust.cart).reduce((a, b) => a + b, 0);
+  return `<div class="cust">
+    <div class="c-head">
+      <div class="row between"><div><div class="small op">Welcome to</div><h2>${esc(S.settings.name)}</h2><div class="small op">${esc(S.settings.tagline)}</div></div><div class="tbl">Table<br><b>${num}</b></div></div>
+      <div class="c-actions">
+        <button data-a="call" data-type="waiter">🙋 Call waiter</button>
+        <button data-a="wifi">📶 WiFi</button>
+        <button data-a="call" data-type="bill">🧾 Ask for bill</button>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab ${cust.tab === 'menu' ? 'on' : ''}" data-a="ctab" data-v="menu">📋 Menu</button>
+      <button class="tab ${cust.tab === 'orders' ? 'on' : ''}" data-a="ctab" data-v="orders">🧾 My orders ${mine.length ? `<span class="dot">${mine.length}</span>` : ''}</button>
+    </div>
+    ${cust.tab === 'menu'
+      ? `<div class="chips">${cats.map(c => `<button class="chip ${c === cust.cat ? 'on' : ''}" data-a="cat" data-v="${esc(c)}">${esc(c)}</button>`).join('')}</div>${items.map(itemRow).join('') || '<p class="muted center">No items yet.</p>'}`
+      : customerOrders(mine)}
+    <div class="wm">Powered by ${esc(DEVELOPER.name)} · Demo version</div>
+    ${count && cust.tab === 'menu' ? `<div class="cartbar" data-a="cart"><span><b>${count} item${count > 1 ? 's' : ''}</b> · ${money(cartTotal())}</span><b>View cart →</b></div>` : ''}
+  </div>`;
+}
+function itemRow(m) {
+  const q = cust.cart[m.id] || 0;
+  const ctrl = !m.available ? '<span class="badge">Sold out</span>'
+    : q ? `<div class="qty"><button class="minus" data-a="dec" data-id="${m.id}">−</button><b>${q}</b><button data-a="inc" data-id="${m.id}">+</button></div>`
+    : `<button class="btn-brand btn-sm" data-a="inc" data-id="${m.id}">Add</button>`;
+  return `<div class="card item ${m.available ? '' : 'off'}"><div class="emoji">${esc(m.emoji || '🍽️')}</div><div class="grow"><h4>${esc(m.name)}</h4><p>${esc(m.desc)}</p><div class="price">${money(m.price)}</div></div>${ctrl}</div>`;
+}
+function customerOrders(list) {
+  if (!list.length) return `<div class="card center muted" style="margin:14px 16px;padding:30px">No orders yet. Pick something tasty from the menu 😋</div>`;
+  return list.map(o => {
+    const si = STEPS.indexOf(o.status);
+    const rev = S.reviews.find(r => r.orderId === o.id);
+    const canReview = o.status !== 'cancelled' && (o.status === 'served' || o.payment.status === 'paid');
+    return `<div class="card ocard">
+      <div class="row between"><b>Order #${o.no}</b><span class="badge b-${o.status}">${STEP_LABEL[o.status]}</span></div>
+      ${o.status !== 'cancelled' ? `<div class="steps">${STEPS.map((s, i) => `<div class="step ${i <= si ? 'done' : ''}"><i></i>${STEP_LABEL[s]}</div>`).join('')}</div>` : ''}
+      <div class="olines">${o.items.map(i => `<div class="row between"><span>${i.qty} × ${esc(i.name)}</span><span>${money(i.price * i.qty)}</span></div>`).join('')}
+        ${o.note ? `<div class="muted small">📝 ${esc(o.note)}</div>` : ''}
+        <div class="row between total"><b>Total</b><b>${money(o.total)}</b></div></div>
+      ${paymentBlock(o)}
+      ${canReview ? (rev ? `<div class="thanks">${starStr(rev.rating)} Thanks for your feedback!</div>` : `<button class="btn-ghost full" data-a="review" data-id="${o.id}">⭐ Rate your experience</button>`) : ''}
+    </div>`;
+  }).join('');
+}
+function paymentBlock(o) {
+  if (o.status === 'cancelled') return '';
+  const p = o.payment;
+  if (p.status === 'paid') return `<div class="paybox paid">✅ Paid · ${p.via ? esc(p.via) : PAY_LABEL[p.method]}</div>`;
+  if (p.status === 'requested') return `<div class="paybox">⏳ ${p.method === 'cash' ? 'A waiter is coming to collect cash' : 'Please pay at the counter'}: <b>${money(o.total)}</b></div>`;
+  return `<div class="paybox"><div class="small muted" style="margin-bottom:8px">How would you like to pay?</div><div class="paygrid">
+    <button data-a="pay" data-m="online" data-id="${o.id}"><span style="font-size:20px">💳</span>Pay online</button>
+    <button data-a="pay" data-m="cash" data-id="${o.id}"><span style="font-size:20px">💵</span>Cash at table</button>
+    <button data-a="pay" data-m="counter" data-id="${o.id}"><span style="font-size:20px">🏪</span>At counter</button></div></div>`;
+}
+function openCart() {
+  const lines = Object.entries(cust.cart).map(([id, q]) => ({ m: S.menu.find(x => x.id === id), q })).filter(x => x.m);
+  if (!lines.length) return closeModal();
+  const sub = cartTotal(), tax = sub * (S.settings.taxPct || 0) / 100;
+  modal(`<h3>Your order · Table ${cust.table}</h3>
+    ${lines.map(({ m, q }) => `<div class="row between cline"><div><b>${esc(m.emoji)} ${esc(m.name)}</b><div class="muted small">${money(m.price)}</div></div><div class="qty"><button class="minus" data-a="dec" data-id="${m.id}">−</button><b>${q}</b><button data-a="inc" data-id="${m.id}">+</button></div></div>`).join('')}
+    <label>Special instructions (optional)</label><textarea id="note" rows="2" placeholder="e.g. less spicy, no onions">${esc(cust.note)}</textarea>
+    <div class="sum"><div class="row between"><span>Subtotal</span><span>${money(sub)}</span></div>${tax ? `<div class="row between"><span>Tax (${S.settings.taxPct}%)</span><span>${money(tax)}</span></div>` : ''}<div class="row between big"><b>Total</b><b>${money(sub + tax)}</b></div></div>
+    <button class="btn-brand full" data-a="place">Place order →</button>`, 'modal-cart');
+}
+function placeOrder() {
+  S = load();
+  if (ordersLeft() <= 0) {
+    modal(`<div class="center"><div class="bigic">🙏</div><h3>Online ordering is paused</h3><p class="muted">The restaurant can't take more online orders today. Please call a waiter to place your order.</p><button class="btn-brand full" data-a="call" data-type="waiter">🙋 Call waiter</button></div>`);
+    return;
+  }
+  const items = Object.entries(cust.cart).map(([id, qty]) => { const m = S.menu.find(x => x.id === id); return m && m.available ? { id, name: m.name, price: m.price, qty } : null; }).filter(Boolean);
+  if (!items.length) return;
+  const sub = items.reduce((a, i) => a + i.price * i.qty, 0);
+  commit(s => s.orders.push({
+    id: uid(), no: s.orders.filter(o => dayKey(o.at) === dayKey()).length + 1, table: cust.table, items,
+    note: cust.note.trim(), status: 'new', payment: { method: null, status: 'unpaid' },
+    total: Math.round(sub * (1 + (s.settings.taxPct || 0) / 100) * 100) / 100, at: Date.now()
+  }));
+  Object.assign(cust, { cart: {}, note: '', tab: 'orders' });
+  closeModal(); render(); toast('Order sent to the kitchen 👨‍🍳');
+}
+function payOnline(o) {
+  modal(`<h3>Pay online</h3><p class="muted small">Order #${o.no} · Table ${o.table}</p>
+    ${['Credit / Debit Card', 'Apple Pay', 'Google Pay'].map((w, i) => `<label class="wallet"><input type="radio" name="w" value="${w}" ${i ? '' : 'checked'}> ${w}</label>`).join('')}
+    <button class="btn-brand full" data-a="paynow" data-id="${o.id}">Pay ${money(o.total)}</button>
+    <p class="center muted small">🔒 Demo mode: no real money is charged.</p>`);
+}
+
+/* =========================================================
+   KITCHEN VIEW
+   ========================================================= */
+function viewKitchen() {
+  document.title = `Kitchen · ${S.settings.name}`;
+  const list = todaysOrders();
+  const calls = S.calls.filter(c => !c.done).sort((a, b) => a.at - b.at);
+  const col = (st, title) => {
+    const os = list.filter(o => o.status === st).sort((a, b) => a.at - b.at);
+    return `<div class="kcol"><div class="kcol-h"><span>${title}</span><span class="kc">${os.length}</span></div>${os.map(kCard).join('') || '<div class="kempty">Nothing here</div>'}</div>`;
+  };
+  return `<div class="kitchen">
+    <div class="row between wrap khead"><div><h2>👨‍🍳 Kitchen display</h2><div class="kmuted">${esc(S.settings.name)} · live · updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div></div>
+      <div class="row"><span class="fbadge">DEMO</span><a class="klink" href="#/admin">Dashboard →</a></div></div>
+    ${calls.length ? `<div class="kcalls">${calls.map(c => `<div class="kcall"><span><b>Table ${c.table}</b> ${CALL_LABEL[c.type]} <span class="kmuted">· ${ago(c.at)}</span></span>${callBtn(c, 'btn-sm')}</div>`).join('')}</div>` : ''}
+    <div class="kgrid">${col('new', '🆕 New')}${col('preparing', '🔥 Preparing')}${col('ready', '✅ Ready to serve')}</div>
+  </div>`;
+}
+function kCard(o) {
+  const mins = Math.floor((Date.now() - o.at) / 60000);
+  const next = { new: ['preparing', 'Start cooking'], preparing: ['ready', 'Mark ready'], ready: ['served', 'Served ✓'] }[o.status];
+  return `<div class="kcard ${mins >= 15 && o.status !== 'ready' ? 'late' : ''}">
+    <div class="row between"><b style="font-size:17px">Table ${o.table}</b><span class="kmuted">#${o.no} · ${mins} min</span></div>
+    <ul>${o.items.map(i => `<li><b>${i.qty}×</b> ${esc(i.name)}</li>`).join('')}</ul>
+    ${o.note ? `<div class="knote">📝 ${esc(o.note)}</div>` : ''}
+    <div class="row"><button class="btn-brand btn-sm grow" data-a="kstatus" data-v="${next[0]}" data-id="${o.id}">${next[1]}</button>${o.status === 'new' ? `<button class="btn-sm kghost" data-a="kstatus" data-v="cancelled" data-id="${o.id}">Cancel</button>` : ''}</div>
+  </div>`;
+}
+function callBtn(c, cls) {
+  return c.orderId ? `<button class="${cls}" data-a="collect" data-id="${c.id}">Payment received</button>` : `<button class="${cls}" data-a="resolve" data-id="${c.id}">Done</button>`;
+}
+let seen = null;
+function kitchenAlert() {
+  const ids = [...todaysOrders().filter(o => o.status === 'new').map(o => o.id), ...S.calls.filter(c => !c.done).map(c => c.id)];
+  if (seen && ids.some(i => !seen.has(i))) beep();
+  seen = new Set(ids);
+}
+function beep() {
+  try {
+    const c = new (window.AudioContext || window.webkitAudioContext)();
+    [0, .18].forEach(t => { const o = c.createOscillator(), g = c.createGain(); o.connect(g); g.connect(c.destination); o.frequency.value = 880; g.gain.value = .12; o.start(c.currentTime + t); o.stop(c.currentTime + t + .12); });
+  } catch (e) {}
+}
+
+/* =========================================================
+   OWNER DASHBOARD
+   ========================================================= */
+const adm = { tab: 'overview', of: 'all' };
+const TABS = [['overview', '📊', 'Overview'], ['orders', '🧾', 'Orders'], ['menu', '🍽️', 'Menu'], ['tables', '🔳', 'Tables & QR'], ['staff', '👥', 'Staff'], ['reviews', '⭐', 'Reviews'], ['settings', '⚙️', 'Settings']];
+function viewAdmin() {
+  const pages = { overview: aOverview, orders: aOrders, menu: aMenu, tables: aTables, staff: aStaff, reviews: aReviews, settings: aSettings };
+  return `<div class="admin">
+    <aside class="side">
+      <div class="brand">${esc(S.settings.name)}<small>Owner dashboard</small></div>
+      <nav>${TABS.map(([k, i, l]) => `<button class="nav ${adm.tab === k ? 'on' : ''}" data-a="atab" data-v="${k}">${i} ${l}</button>`).join('')}</nav>
+      <div class="side-links"><a href="#/kitchen" target="_blank">👨‍🍳 Open kitchen screen ↗</a><a href="#/table/${S.tables[0]?.num || 1}" target="_blank">📱 Open customer view ↗</a><a href="#/">🏠 Demo home</a></div>
+      ${planCard()}
+    </aside>
+    <main class="main">${pages[adm.tab]()}</main>
+  </div>`;
+}
+function planCard() {
+  const u = [['Tables', S.tables.length, LIMITS.tables], ['Menu items', S.menu.length, LIMITS.menuItems], ['Orders today', todaysOrders().length, LIMITS.ordersPerDay]];
+  return `<div class="plan"><div class="row between"><b>Demo version</b><span class="badge">DEMO</span></div>
+    ${u.map(([l, a, b]) => `<div class="ulabel"><span>${l}</span><span>${a}/${b}</span></div><div class="meter"><i style="width:${Math.min(100, a / b * 100)}%;${a >= b ? 'background:#e74c3c' : ''}"></i></div>`).join('')}
+    <button class="btn-brand full btn-sm" data-a="upgrade">⚡ Get the full version</button></div>`;
+}
+function limitBanner() {
+  const left = ordersLeft();
+  if (left <= 0) return `<div class="banner red"><span>⛔ <b>Daily order limit reached (${LIMITS.ordersPerDay}/${LIMITS.ordersPerDay}).</b> Guests can't order from their phones until tomorrow.</span><button class="btn-brand btn-sm" data-a="upgrade">Get full version</button></div>`;
+  if (left <= 5) return `<div class="banner amber"><span>⚠️ Only <b>${left}</b> online order${left > 1 ? 's' : ''} left today in this demo.</span><button class="btn-sm" data-a="upgrade">Learn more</button></div>`;
+  return '';
+}
+const stat = (l, v, s) => `<div class="card stat"><div class="muted small">${l}</div><div class="v">${v}</div><div class="muted small">${s}</div></div>`;
+function aOverview() {
+  const os = todaysOrders().filter(o => o.status !== 'cancelled');
+  const sales = os.reduce((a, o) => a + o.total, 0);
+  const collected = os.filter(o => o.payment.status === 'paid').reduce((a, o) => a + o.total, 0);
+  const avg = S.reviews.length ? (S.reviews.reduce((a, r) => a + r.rating, 0) / S.reviews.length).toFixed(1) + ' ★' : '–';
+  const active = os.filter(o => ['new', 'preparing', 'ready'].includes(o.status)).length;
+  const counts = {}; os.forEach(o => o.items.forEach(i => counts[i.name] = (counts[i.name] || 0) + i.qty));
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5), max = top[0]?.[1] || 1;
+  const calls = S.calls.filter(c => !c.done);
+  return `${limitBanner()}<h1>Good ${greet()} 👋</h1><p class="muted">${new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })} · today's summary</p>
+    <div class="stats">
+      ${stat("Today's sales", money(sales), `${money(collected)} collected`)}
+      ${stat('Orders today', os.length, `${Math.max(0, ordersLeft())} left in demo`)}
+      ${stat('Active orders', active, 'in kitchen or waiting to serve')}
+      ${stat('Average rating', avg, `${S.reviews.length} reviews`)}
+    </div>
+    <div class="two">
+      <div class="card"><h3>Top items today</h3>${top.length ? top.map(([n, c]) => `<div class="bar"><span>${esc(n)}</span><div class="meter"><i style="width:${c / max * 100}%"></i></div><b>${c}</b></div>`).join('') : '<p class="muted">No orders yet today.</p>'}</div>
+      <div class="card"><h3>Live requests from tables</h3>${calls.length ? calls.map(c => `<div class="row between lrow"><span><b>Table ${c.table}</b> ${CALL_LABEL[c.type]} <span class="muted small">· ${ago(c.at)}</span></span>${callBtn(c, 'btn-sm btn-ghost')}</div>`).join('') : '<p class="muted">No pending requests.</p>'}</div>
+    </div>
+    <div class="card lockcard" data-a="upgrade"><div><h3>📈 Weekly & monthly reports <span class="badge">CUSTOM</span></h3><p class="muted">Sales trends, peak hours, best sellers and staff performance.</p></div><span>🔒</span></div>
+    <div class="card"><h3>Recent orders</h3>${ordersTable(os.slice().sort((a, b) => b.at - a.at).slice(0, 6))}</div>`;
+}
+function ordersTable(list) {
+  if (!list.length) return '<p class="muted">No orders.</p>';
+  const payBadge = o => o.payment.status === 'paid' ? `<span class="badge b-paid">Paid · ${PAY_LABEL[o.payment.method]}</span>`
+    : o.payment.status === 'requested' ? `<span class="badge b-preparing">${PAY_LABEL[o.payment.method]} (pending)</span>`
+    : o.status === 'cancelled' ? '–' : '<span class="badge b-unpaid">Unpaid</span>';
+  return `<div class="tw"><table><thead><tr><th>#</th><th>Table</th><th>Items</th><th>Total</th><th>Status</th><th>Payment</th><th></th></tr></thead><tbody>
+    ${list.map(o => `<tr><td>${o.no}</td><td>${o.table}</td><td class="small">${o.items.map(i => `${i.qty}× ${esc(i.name)}`).join(', ')}<div class="muted">${ago(o.at)}</div></td><td class="nowrap"><b>${money(o.total)}</b></td><td><span class="badge b-${o.status}">${STEP_LABEL[o.status]}</span></td><td>${payBadge(o)}</td>
+      <td class="nowrap">${o.status !== 'cancelled' && o.payment.status !== 'paid' ? `<button class="btn-sm btn-ghost" data-a="markpaid" data-id="${o.id}">Mark paid</button>` : ''}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+function aOrders() {
+  const all = todaysOrders().slice().sort((a, b) => b.at - a.at);
+  const fl = { all: () => true, active: o => ['new', 'preparing', 'ready'].includes(o.status), served: o => o.status === 'served', unpaid: o => o.status !== 'cancelled' && o.payment.status !== 'paid', cancelled: o => o.status === 'cancelled' };
+  return `${limitBanner()}<h1>Today's orders</h1><p class="muted">${all.length}/${LIMITS.ordersPerDay} online orders used today</p>
+    <div class="chips nopad">${Object.keys(fl).map(k => `<button class="chip ${k === adm.of ? 'on' : ''}" data-a="ofilter" data-v="${k}">${k[0].toUpperCase() + k.slice(1)} (${all.filter(fl[k]).length})</button>`).join('')}</div>
+    <div class="card">${ordersTable(all.filter(fl[adm.of]))}</div>
+    <div class="card lockcard" data-a="upgrade"><div><h3>🗂️ Full order history & Excel export <span class="badge">CUSTOM</span></h3><p class="muted">The demo shows today's orders only.</p></div><span>🔒</span></div>`;
+}
+function aMenu() {
+  const full = S.menu.length >= LIMITS.menuItems;
+  return `<div class="row between wrap"><div><h1>Menu</h1><p class="muted">${S.menu.length}/${LIMITS.menuItems} items in the demo · tap a status to mark an item sold out</p></div>
+    <button class="btn-brand" data-a="${full ? 'upgrade' : 'editItem'}">${full ? '🔒 Item limit reached' : '+ Add item'}</button></div>
+    <div class="card" style="margin-top:14px"><div class="tw"><table><thead><tr><th></th><th>Item</th><th>Category</th><th>Price</th><th>Status</th><th></th></tr></thead><tbody>
+    ${S.menu.map(m => `<tr><td class="em">${esc(m.emoji)}</td><td><b>${esc(m.name)}</b><div class="muted small">${esc(m.desc)}</div></td><td>${esc(m.cat)}</td><td class="nowrap">${money(m.price)}</td>
+      <td><button class="badge as-btn ${m.available ? 'b-ready' : 'b-cancelled'}" data-a="toggleAvail" data-id="${m.id}">${m.available ? 'Available' : 'Sold out'}</button></td>
+      <td class="nowrap"><button class="btn-sm btn-ghost" data-a="editItem" data-id="${m.id}">Edit</button> <button class="btn-sm btn-danger" data-a="delItem" data-id="${m.id}">Delete</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">No items yet.</td></tr>'}
+    </tbody></table></div></div>`;
+}
+// Opened as a local file (e.g. while taking screenshots), QR codes point to the public demo instead of a file path.
+const PUBLIC_URL = 'https://qr-dine-demo.onrender.com/';
+function tableUrl(n) { return (location.protocol === 'file:' ? PUBLIC_URL : location.origin + location.pathname) + '#/table/' + n; }
+function qrSvg(url, cell = 4) {
+  if (typeof qrcode !== 'function') return '<div class="muted small center">QR library could not load (check your internet connection)</div>';
+  const q = qrcode(0, 'M'); q.addData(url); q.make();
+  return q.createSvgTag({ cellSize: cell, margin: 2, scalable: true });
+}
+function aTables() {
+  const full = S.tables.length >= LIMITS.tables;
+  return `<div class="row between wrap"><div><h1>Tables & QR codes</h1><p class="muted">${S.tables.length}/${LIMITS.tables} tables in the demo · print each QR and stick it on its table</p></div>
+    <button class="btn-brand" data-a="${full ? 'upgrade' : 'addTable'}">${full ? '🔒 Table limit reached' : '+ Add table'}</button></div>
+    <div class="qrgrid">${S.tables.slice().sort((a, b) => a.num - b.num).map(t => {
+      const busy = todaysOrders().filter(o => o.table === t.num && ['new', 'preparing', 'ready'].includes(o.status)).length;
+      const url = tableUrl(t.num);
+      return `<div class="card qrcard"><div class="row between"><h3 style="margin:0">Table ${t.num}</h3><span class="badge ${busy ? 'b-preparing' : 'b-ready'}">${busy ? busy + ' active order' + (busy > 1 ? 's' : '') : 'Free'}</span></div>
+        <div class="qr">${qrSvg(url)}</div>
+        <div class="row"><a class="abtn btn-sm btn-ghost" href="#/table/${t.num}" target="_blank">Open</a><button class="btn-sm btn-ghost" data-a="printQr" data-n="${t.num}">🖨️ Print</button><button class="btn-sm btn-danger" data-a="delTable" data-id="${t.id}">Delete</button></div></div>`;
+    }).join('')}</div>`;
+}
+function aStaff() {
+  return `<div class="row between wrap"><div><h1>Staff</h1><p class="muted">${S.staff.filter(x => x.active).length} of ${S.staff.length} on duty</p></div><button class="btn-brand" data-a="editStaff">+ Add staff</button></div>
+    <div class="card" style="margin-top:14px"><div class="tw"><table><thead><tr><th>Name</th><th>Role</th><th>Phone</th><th>Status</th><th></th></tr></thead><tbody>
+    ${S.staff.map(p => `<tr><td><b>${esc(p.name)}</b></td><td>${esc(p.role)}</td><td>${esc(p.phone)}</td><td><button class="badge as-btn ${p.active ? 'b-ready' : 'b-cancelled'}" data-a="toggleStaff" data-id="${p.id}">${p.active ? 'On duty' : 'Off duty'}</button></td>
+      <td class="nowrap"><button class="btn-sm btn-ghost" data-a="editStaff" data-id="${p.id}">Edit</button> <button class="btn-sm btn-danger" data-a="delStaff" data-id="${p.id}">Remove</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">No staff yet.</td></tr>'}
+    </tbody></table></div></div>`;
+}
+function aReviews() {
+  const rs = S.reviews.slice().sort((a, b) => b.at - a.at), n = rs.length;
+  const avg = n ? rs.reduce((a, r) => a + r.rating, 0) / n : 0;
+  return `<h1>Reviews</h1><p class="muted">What your guests say after their meal</p>
+    <div class="two" style="margin-top:14px"><div class="card center"><div class="bigavg">${n ? avg.toFixed(1) : '–'}</div><div class="starline" style="font-size:20px">${starStr(Math.round(avg))}</div><div class="muted">${n} review${n === 1 ? '' : 's'}</div></div>
+      <div class="card">${[5, 4, 3, 2, 1].map(s => { const c = rs.filter(r => r.rating === s).length; return `<div class="bar"><span style="width:40px">${s} ★</span><div class="meter"><i style="width:${n ? c / n * 100 : 0}%;background:#f5a623"></i></div><b>${c}</b></div>`; }).join('')}</div></div>
+    ${rs.map(r => `<div class="card rv"><div class="row between"><span class="starline">${starStr(r.rating)}</span><span class="muted small">${r.table ? 'Table ' + r.table + ' · ' : ''}${new Date(r.at).toLocaleDateString()}</span></div>${r.text ? `<p>${esc(r.text)}</p>` : '<p class="muted">No comment</p>'}</div>`).join('')}`;
+}
+function aSettings() {
+  const s = S.settings;
+  return `<h1>Settings</h1><p class="muted">Shown to guests on the customer menu</p>
+    <form class="card" data-f="settings" style="margin-top:14px">
+      <div class="frow"><div><label>Restaurant name</label><input name="name" required value="${esc(s.name)}"></div><div><label>Tagline</label><input name="tagline" value="${esc(s.tagline)}"></div></div>
+      <div class="frow"><div><label>WiFi name</label><input name="wifiName" value="${esc(s.wifiName)}"></div><div><label>WiFi password</label><input name="wifiPass" value="${esc(s.wifiPass)}"></div></div>
+      <div class="frow"><div><label>Currency</label><input name="currency" required value="${esc(s.currency)}"></div><div><label>Tax %</label><input name="taxPct" type="number" min="0" max="50" step="0.5" value="${s.taxPct}"></div></div>
+      <button class="btn-brand" style="margin-top:16px">Save settings</button>
+    </form>
+    <div class="card lockcard" data-a="upgrade"><div><h3>🎨 Logo, brand colours & custom domain <span class="badge">CUSTOM</span></h3><p class="muted">Make the menu look exactly like your restaurant's brand.</p></div><span>🔒</span></div>
+    <div class="card"><h3>Demo data</h3><p class="muted">Start fresh: clear the sample orders or reset the whole demo.</p><div class="row wrap"><button class="btn-ghost" data-a="loadSample">Load sample orders</button><button class="btn-ghost" data-a="clearToday">Clear today's orders & requests</button><button class="btn-danger" data-a="resetAll">Reset everything</button></div></div>`;
+}
+function upgradeModal() {
+  const wa = DEVELOPER.whatsapp ? `https://wa.me/${DEVELOPER.whatsapp}?text=${encodeURIComponent("Hi! I tried the QR restaurant ordering demo and I'd like a custom version for my restaurant.")}` : '';
+  const rows = [['Tables', '5', 'Unlimited'], ['Menu items', '15', 'Unlimited'], ['Orders per day', '20', 'Unlimited'], ['Works across all phones & tablets', 'One device', '✓'], ['Real online payments (Stripe, PayPal, local wallets)', 'Simulated', '✓'], ['Reports & full order history', '–', '✓'], ['Your logo, colours & own domain', '–', '✓'], ['Receipt printer & WhatsApp / SMS alerts', '–', '✓'], ['Multiple branches & languages', '–', '✓'], ['Any extra feature you need', '–', '✓']];
+  modal(`<div class="center"><div class="bigic">🚀</div><h2>Get your custom version</h2><p class="muted">You're using the demo. We build a version made for your restaurant, with no limits and the features you choose.</p></div>
+    <div class="cmp"><div class="cmp-h"><span></span><b>Demo</b><b>Custom</b></div>${rows.map(r => `<div class="cmp-r"><span>${r[0]}</span><span>${r[1]}</span><b>${r[2]}</b></div>`).join('')}</div>
+    ${wa ? `<a class="abtn btn-brand full" href="${wa}" target="_blank" rel="noopener">💬 Contact us on WhatsApp</a>`
+      : DEVELOPER.email ? `<a class="abtn btn-brand full" href="mailto:${esc(DEVELOPER.email)}">✉️ Contact us</a>`
+      : `<p class="center muted">Contact <b>${esc(DEVELOPER.name)}</b> to get your custom version.</p>`}`);
+}
+
+/* =========================================================
+   ACTIONS (all clicks go through here)
+   ========================================================= */
+const A = {
+  close: () => closeModal(),
+  upgrade: () => upgradeModal(),
+  copy: d => { navigator.clipboard?.writeText(d.v).then(() => toast('Copied ✓'), () => toast(d.v)); },
+  // customer
+  cat: d => { cust.cat = d.v; render(); },
+  ctab: d => { cust.tab = d.v; render(); },
+  inc: d => { cust.cart[d.id] = (cust.cart[d.id] || 0) + 1; render(); if (document.querySelector('.modal-cart')) openCart(); },
+  dec: d => { const q = (cust.cart[d.id] || 0) - 1; if (q <= 0) delete cust.cart[d.id]; else cust.cart[d.id] = q; render(); if (document.querySelector('.modal-cart')) openCart(); },
+  cart: () => openCart(),
+  place: () => placeOrder(),
+  call: d => {
+    S = load();
+    if (S.calls.some(c => !c.done && c.table === cust.table && c.type === d.type)) { closeModal(); return toast('Already requested: someone is on the way'); }
+    commit(s => s.calls.push({ id: uid(), table: cust.table, type: d.type, at: Date.now(), done: false }));
+    closeModal(); toast(d.type === 'bill' ? 'Bill requested 🧾' : 'A waiter is on the way 🙋');
+  },
+  wifi: () => modal(`<div class="center"><div class="bigic">📶</div><h3>Free WiFi</h3></div>
+    <div class="wifi-box"><div><div class="muted small">Network</div><b>${esc(S.settings.wifiName)}</b></div></div>
+    <div class="wifi-box"><div><div class="muted small">Password</div><b>${esc(S.settings.wifiPass)}</b></div><button class="btn-sm btn-brand" data-a="copy" data-v="${esc(S.settings.wifiPass)}">Copy</button></div>`),
+  pay: d => {
+    const o = S.orders.find(x => x.id === d.id); if (!o) return;
+    if (d.m === 'online') return payOnline(o);
+    commit(s => { const x = s.orders.find(y => y.id === d.id); if (!x) return; x.payment = { method: d.m, status: 'requested' }; s.calls.push({ id: uid(), table: x.table, type: d.m, at: Date.now(), done: false, orderId: x.id }); });
+    toast(d.m === 'cash' ? 'A waiter will collect cash at your table' : 'Please pay at the counter');
+  },
+  paynow: (d, el) => {
+    const via = document.querySelector('input[name=w]:checked')?.value || 'Online';
+    el.disabled = true; el.textContent = 'Processing…';
+    setTimeout(() => { commit(s => { const x = s.orders.find(y => y.id === d.id); if (x) x.payment = { method: 'online', via, status: 'paid', at: Date.now() }; }); closeModal(); toast('Payment successful ✅'); }, 1300);
+  },
+  review: d => modal(`<div class="center"><div class="bigic">😋</div><h3>How was your meal?</h3></div><div class="stars" id="stars" data-r="5">${[1, 2, 3, 4, 5].map(n => `<button class="star on" data-a="star" data-n="${n}" aria-label="${n} stars">★</button>`).join('')}</div>
+    <label>Comments (optional)</label><textarea id="rtext" rows="3" placeholder="Tell us what you liked…"></textarea><button class="btn-brand full" data-a="sendreview" data-id="${d.id}">Submit review</button>`),
+  star: d => { const box = document.getElementById('stars'); box.dataset.r = d.n; box.querySelectorAll('.star').forEach((b, i) => b.classList.toggle('on', i < +d.n)); },
+  sendreview: d => {
+    const rating = +document.getElementById('stars').dataset.r, text = document.getElementById('rtext').value.trim();
+    commit(s => { if (!s.reviews.some(r => r.orderId === d.id)) s.reviews.push({ id: uid(), orderId: d.id, table: cust.table, rating, text, at: Date.now() }); });
+    closeModal(); toast('Thank you for your review! ⭐');
+  },
+  // kitchen / staff
+  kstatus: d => commit(s => { const o = s.orders.find(x => x.id === d.id); if (o) o.status = d.v; }),
+  resolve: d => commit(s => { const c = s.calls.find(x => x.id === d.id); if (c) c.done = true; }),
+  collect: d => commit(s => { const c = s.calls.find(x => x.id === d.id); if (!c) return; c.done = true; const o = s.orders.find(x => x.id === c.orderId); if (o) o.payment.status = 'paid'; }),
+  markpaid: d => commit(s => { const o = s.orders.find(x => x.id === d.id); if (!o) return; o.payment = { method: o.payment.method || 'counter', status: 'paid', at: Date.now() }; s.calls.forEach(c => { if (c.orderId === o.id) c.done = true; }); }),
+  // admin
+  atab: d => { adm.tab = d.v; render(); scrollTo(0, 0); },
+  ofilter: d => { adm.of = d.v; render(); },
+  toggleAvail: d => commit(s => { const m = s.menu.find(x => x.id === d.id); if (m) m.available = !m.available; }),
+  delItem: d => { const m = S.menu.find(x => x.id === d.id); if (m && confirm(`Delete "${m.name}" from the menu?`)) commit(s => { s.menu = s.menu.filter(x => x.id !== d.id); }); },
+  editItem: d => {
+    const m = S.menu.find(x => x.id === d.id) || { name: '', cat: '', price: '', emoji: '🍽️', desc: '' };
+    const cats = [...new Set(S.menu.map(x => x.cat))];
+    modal(`<form data-f="item" data-id="${d.id || ''}"><h3>${d.id ? 'Edit item' : 'Add menu item'}</h3>
+      <div class="frow"><div style="flex:0 0 90px"><label>Emoji</label><input name="emoji" value="${esc(m.emoji)}" maxlength="8"></div><div><label>Name</label><input name="name" required value="${esc(m.name)}"></div></div>
+      <div class="frow"><div><label>Category</label><input name="cat" required list="cats" value="${esc(m.cat)}"><datalist id="cats">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist></div><div><label>Price (${esc(S.settings.currency)})</label><input name="price" type="number" min="0" step="0.01" required value="${m.price}"></div></div>
+      <label>Description</label><input name="desc" value="${esc(m.desc)}">
+      <button class="btn-brand full" style="margin-top:18px">Save</button></form>`);
+  },
+  addTable: () => commit(s => { if (s.tables.length >= LIMITS.tables) return; const num = Math.max(0, ...s.tables.map(t => t.num)) + 1; s.tables.push({ id: uid(), num }); }),
+  delTable: d => { const t = S.tables.find(x => x.id === d.id); if (t && confirm(`Delete Table ${t.num}? Its QR code will stop working.`)) commit(s => { s.tables = s.tables.filter(x => x.id !== d.id); }); },
+  printQr: d => {
+    const n = +d.n, w = window.open('', '_blank');
+    if (!w) return toast('Please allow pop-ups to print');
+    w.document.write(`<html><head><title>Table ${n} QR</title><style>body{font-family:system-ui,sans-serif;text-align:center;padding:40px}svg{width:280px;height:280px}.t{font-size:48px;font-weight:800;margin:6px 0 16px}</style></head><body><h2>${esc(S.settings.name)}</h2><div class="t">Table ${n}</div>${qrSvg(tableUrl(n), 8)}<p style="font-size:18px">📱 Scan to see the menu, order & pay</p><p style="color:#999;font-size:12px">Powered by ${esc(DEVELOPER.name)}</p><script>onload=()=>print()<\/script></body></html>`);
+    w.document.close();
+  },
+  editStaff: d => {
+    const p = S.staff.find(x => x.id === d.id) || { name: '', role: 'Waiter', phone: '' };
+    modal(`<form data-f="staff" data-id="${d.id || ''}"><h3>${d.id ? 'Edit staff member' : 'Add staff member'}</h3>
+      <label>Name</label><input name="name" required value="${esc(p.name)}">
+      <div class="frow"><div><label>Role</label><select name="role">${['Waiter', 'Chef', 'Cashier', 'Manager', 'Rider'].map(r => `<option ${r === p.role ? 'selected' : ''}>${r}</option>`).join('')}</select></div><div><label>Phone</label><input name="phone" value="${esc(p.phone)}"></div></div>
+      <button class="btn-brand full" style="margin-top:18px">Save</button></form>`);
+  },
+  toggleStaff: d => commit(s => { const p = s.staff.find(x => x.id === d.id); if (p) p.active = !p.active; }),
+  delStaff: d => { const p = S.staff.find(x => x.id === d.id); if (p && confirm(`Remove ${p.name}?`)) commit(s => { s.staff = s.staff.filter(x => x.id !== d.id); }); },
+  clearToday: () => { if (confirm("Clear all of today's orders and table requests?")) commit(s => { s.orders = s.orders.filter(o => dayKey(o.at) !== dayKey()); s.calls = []; }); toast('Cleared'); },
+  unlock: () => accessModal(),
+  loadSample: () => { localStorage.setItem(KEY, JSON.stringify(withSample(seed()))); S = load(); adm.tab = 'overview'; render(); toast('Sample orders loaded'); },
+  resetAll: () => { if (confirm('Reset the whole demo to its original sample data?')) { localStorage.removeItem(KEY); S = load(); adm.tab = 'overview'; render(); toast('Demo reset'); } }
+};
+const F = {
+  item: (v, d) => {
+    const data = { name: v.name.trim(), cat: v.cat.trim(), price: Math.max(0, +v.price || 0), emoji: v.emoji.trim() || '🍽️', desc: v.desc.trim() };
+    commit(s => {
+      if (d.id) { const m = s.menu.find(x => x.id === d.id); if (m) Object.assign(m, data); }
+      else if (s.menu.length < LIMITS.menuItems) s.menu.push({ id: uid(), available: true, ...data });
+    });
+    closeModal(); toast('Menu saved ✓');
+  },
+  staff: (v, d) => {
+    const data = { name: v.name.trim(), role: v.role, phone: v.phone.trim() };
+    commit(s => { if (d.id) { const p = s.staff.find(x => x.id === d.id); if (p) Object.assign(p, data); } else s.staff.push({ id: uid(), active: true, ...data }); });
+    closeModal(); toast('Staff saved ✓');
+  },
+  access: async (v, d, f) => {
+    const ok = (await sha256(v.code)) === ACCESS_CODE_SHA256;
+    if (!ok) { f.querySelector('.acerr').textContent = "That code isn't right. Check it and try again."; return; }
+    unlocked = true; localStorage.setItem(UNLOCK_KEY, ACCESS_CODE_SHA256);
+    const next = afterUnlock; afterUnlock = null;
+    closeModal(); render(); toast('Unlocked ✓ Enjoy the demo!');
+    if (next) next();
+  },
+  settings: v => {
+    document.activeElement?.blur();
+    commit(s => Object.assign(s.settings, { name: v.name.trim(), tagline: v.tagline.trim(), wifiName: v.wifiName.trim(), wifiPass: v.wifiPass.trim(), currency: v.currency.trim() || '$', taxPct: Math.max(0, +v.taxPct || 0) }));
+    toast('Settings saved ✓');
+  }
+};
+/* ---------- access code ---------- */
+const UNLOCK_KEY = 'qrdine_unlocked';
+let unlocked = localStorage.getItem(UNLOCK_KEY) === ACCESS_CODE_SHA256;
+let afterUnlock = null;
+// Actions that change something need the code; browsing, the cart and the WiFi popup stay open.
+const LOCKED = new Set(['place', 'call', 'pay', 'review', 'kstatus', 'resolve', 'collect', 'markpaid', 'toggleAvail', 'delItem', 'editItem',
+  'addTable', 'delTable', 'printQr', 'editStaff', 'toggleStaff', 'delStaff', 'clearToday', 'resetAll', 'loadSample']);
+const LOCKED_FORMS = new Set(['settings']);
+async function sha256(t) {
+  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(t).trim().toUpperCase()));
+  return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+function accessModal(next) {
+  afterUnlock = next || null;
+  const ig = DEVELOPER.instagram ? ` on Instagram <b>@${esc(DEVELOPER.instagram)}</b>` : '';
+  modal(`<div class="center"><div class="bigic">🔒</div><h3>Enter the access code</h3>
+    <p class="muted">Anyone can look around. Placing orders and making changes needs the access code we shared with you.</p></div>
+    <form data-f="access"><input name="code" placeholder="Access code" autocomplete="off" required aria-label="Access code">
+    <div class="acerr small" style="color:#c0392b;margin-top:6px"></div><button class="btn-brand full">Unlock</button></form>
+    <p class="center muted small" style="margin-top:14px">No code yet? DM us "${DM_KEYWORD}"${ig} and we'll send you one.</p>`);
+  setTimeout(() => document.querySelector('#modal-root input[name=code]')?.focus(), 50);
+}
+
+/* ---------- sample orders (Settings → Load sample orders, or ?sample=1) ---------- */
+function withSample(s) {
+  const min = m => Date.now() - m * 60000, it = (i, qty) => ({ id: s.menu[i].id, name: s.menu[i].name, price: s.menu[i].price, qty });
+  const mk = (table, mins, items, status, pay, note = '') => {
+    const sub = items.reduce((a, i) => a + i.price * i.qty, 0);
+    s.orders.push({ id: uid(), no: s.orders.length + 1, table, items, note, status, payment: pay, total: Math.round(sub * 100) / 100, at: min(mins) });
+    return s.orders[s.orders.length - 1];
+  };
+  s.tables.push({ id: uid(), num: 4 }, { id: uid(), num: 5 });
+  const paid = (method, via) => ({ method, via, status: 'paid' });
+  mk(1, 140, [it(3, 2), it(8, 2)], 'served', paid('online', 'Credit / Debit Card'));
+  mk(3, 115, [it(4, 1), it(1, 1), it(10, 2)], 'served', paid('cash'));
+  mk(2, 95, [it(5, 2), it(11, 2)], 'served', paid('counter'));
+  mk(4, 70, [it(6, 1), it(7, 1), it(9, 2)], 'served', paid('online', 'Apple Pay'));
+  const o5 = mk(5, 42, [it(3, 3), it(0, 1), it(8, 3)], 'served', { method: 'cash', status: 'requested' });
+  mk(1, 24, [it(4, 2), it(2, 2)], 'ready', { method: null, status: 'unpaid' });
+  mk(3, 12, [it(7, 1), it(5, 1), it(9, 2)], 'preparing', { method: null, status: 'unpaid' }, 'Steak medium rare');
+  mk(2, 3, [it(3, 1), it(1, 1), it(8, 1)], 'new', { method: null, status: 'unpaid' }, 'No onions please');
+  mk(4, 1, [it(11, 2), it(9, 2)], 'new', { method: null, status: 'unpaid' });
+  s.calls.push({ id: uid(), table: 5, type: 'cash', at: min(2), done: false, orderId: o5.id }, { id: uid(), table: 3, type: 'waiter', at: min(1), done: false });
+  s.reviews.push({ id: uid(), orderId: s.orders[0].id, table: 1, rating: 5, text: 'Loved not having to wait for the menu. Great burger!', at: min(100) },
+    { id: uid(), orderId: s.orders[2].id, table: 2, rating: 5, text: 'Super fast. The pizza came out in 10 minutes.', at: min(60) });
+  return s;
+}
+if (new URLSearchParams(location.search).get('sample') === '1') {
+  localStorage.setItem(KEY, JSON.stringify(withSample(seed()))); S = load();
+  history.replaceState(null, '', location.pathname + location.hash);
+}
+// Deep link to a dashboard tab, e.g. #/admin/tables (used for screenshots)
+if (route().view === 'admin' && TABS.some(t => t[0] === route().arg)) { adm.tab = route().arg; history.replaceState(null, '', location.pathname + location.search + '#/admin'); }
+
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-a]'); if (!el) return;
+  const fn = A[el.dataset.a]; if (!fn) return;
+  e.preventDefault();
+  if (LOCKED.has(el.dataset.a) && !unlocked) return accessModal(() => fn(el.dataset, el));
+  fn(el.dataset, el);
+});
+document.addEventListener('submit', e => {
+  const f = e.target, fn = F[f.dataset.f]; if (!fn) return;
+  e.preventDefault();
+  const v = Object.fromEntries(new FormData(f));
+  if (LOCKED_FORMS.has(f.dataset.f) && !unlocked) return accessModal(() => fn(v, f.dataset, f));
+  fn(v, f.dataset, f);
+});
+document.addEventListener('input', e => { if (e.target.id === 'note') cust.note = e.target.value; });
+
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>QR Dine carousel</title>
+<!-- Social carousel, 1080x1350 per slide. Render one slide with ?s=N (1-9).
+     Same theme as the DocuFlow AI carousel: #010001 -> #720063 diagonal gradient, Poppins.
+     Rebuild screenshots: python scripts/make_screens.py
+     Rebuild images + PDF: python scripts/make_social.py -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:linear-gradient(135deg, #010001 0%, #3a0033 50%, #720063 100%);
+          --card:rgba(255,255,255,.07); --border:rgba(255,255,255,.16); --text:#ffffff; --muted:#ead7e6; --faint:#c3a2bd;
+          --accent:#ff7ad9; --accent-ink:#3a0033; --accent-soft:rgba(255,122,217,.16); --good:#7be3a0; --warn:#ffd27a; --bad:#ff9a98; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:1080px; height:1350px; overflow:hidden; background:#010001; }
+  body { color:var(--text); font-family:"Poppins", "Segoe UI", system-ui, sans-serif; }
+  .slide { display:none; width:1080px; height:1350px; padding:84px 80px 72px; position:relative; flex-direction:column; background:var(--bg); }
+  .slide.on { display:flex; }
+  .slide > * { position:relative; }
+  .brand { display:flex; justify-content:space-between; align-items:center; font-size:30px; font-weight:700; color:var(--muted); }
+  .brand b { color:var(--text); } .brand b span { color:var(--accent); }
+  .count { font-size:24px; font-weight:600; color:var(--faint); font-variant-numeric:tabular-nums; }
+  .kicker { margin-top:64px; font-size:26px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); }
+  h1 { font-size:76px; line-height:1.08; font-weight:700; letter-spacing:-.01em; margin-top:18px; }
+  h2 { font-size:60px; line-height:1.12; font-weight:700; letter-spacing:-.01em; margin-top:16px; }
+  .hl { color:var(--accent); }
+  .lead { font-size:32px; line-height:1.45; color:var(--muted); margin-top:28px; }
+  .foot { margin-top:auto; display:flex; justify-content:space-between; align-items:center; font-size:26px; color:var(--faint); }
+  .swipe { color:var(--text); font-weight:700; }
+  .shot { border-radius:22px; border:2px solid var(--border); background-repeat:no-repeat; box-shadow:0 30px 80px rgba(0,0,0,.55); flex:none; }
+  .phones { display:flex; gap:40px; justify-content:center; margin-top:48px; }
+  .phones .shot { border-radius:36px; border:6px solid #1b0018; }
+  .list { margin-top:48px; display:flex; flex-direction:column; gap:26px; }
+  .row { display:flex; gap:26px; align-items:flex-start; background:var(--card); border:2px solid var(--border); border-radius:22px; padding:30px 34px; }
+  .ico { flex:0 0 72px; height:72px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:40px; background:var(--accent-soft); }
+  .row b { display:block; font-size:34px; font-weight:600; margin-bottom:6px; }
+  .row span { font-size:26px; color:var(--muted); line-height:1.35; }
+  .n { flex:0 0 72px; height:72px; border-radius:50%; background:var(--accent); color:var(--accent-ink); font-size:34px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+  .chips { display:flex; flex-wrap:wrap; gap:14px; margin-top:40px; }
+  .chip { border:2px solid var(--border); border-radius:999px; padding:12px 24px; font-size:26px; color:var(--muted); background:var(--card); }
+  .cta { margin-top:54px; background:#ffffff; color:var(--accent-ink); border-radius:26px; padding:40px 44px; }
+  .cta .t { font-size:48px; font-weight:700; color:#720063; line-height:1.1; }
+  .cta .s { font-size:30px; margin-top:14px; opacity:.92; line-height:1.35; }
+  .tag { display:inline-flex; gap:10px; align-items:center; font-size:26px; font-weight:700; padding:8px 18px; border-radius:999px; }
+  .tag.good { background:rgba(123,227,160,.16); color:var(--good); } .tag.warn { background:rgba(255,210,122,.16); color:var(--warn); }
+  .cover { justify-content:center; align-items:center; text-align:center; padding:80px; }
+  .cover .name { font-size:120px; font-weight:800; line-height:1.05; letter-spacing:-.01em; }
+  .cover .desc { font-size:76px; font-weight:800; line-height:1.15; margin-top:70px; }
+</style>
+</head>
+<body>
+
+<!-- 1. Cover (matches the profile grid covers) -->
+<section class="slide cover">
+  <div class="name">QR Dine</div>
+  <div class="desc">Smart QR Ordering<br>for Restaurants</div>
+</section>
+
+<!-- 2. Hook -->
+<section class="slide">
+  <div class="brand"><b>QR <span>Dine</span></b><span class="count">2/9</span></div>
+  <div class="kicker">Web app · built by our team</div>
+  <h1>Scan. Order. Eat. <span class="hl">No waiting</span> for a waiter.</h1>
+  <p class="lead">Every table gets a QR code. Guests see the menu and order from their own phone. No app to install.</p>
+  <div class="phones"><div class="shot" data-src="../screenshots/2-menu.png" data-size="1040,2200" data-crop="0,0,1040,1180" data-w="520"></div></div>
+  <div class="foot"><span>See how it works</span><span class="swipe">Swipe →</span></div>
+</section>
+
+<!-- 3. Problem -->
+<section class="slide">
+  <div class="brand"><b>QR <span>Dine</span></b><span class="count">3/9</span></div>
+  <div class="kicker">The problem</div>
+  <h2>Busy nights lose restaurants <span class="hl">money</span></h2>
+  <div class="list">
+    <div class="row"><div class="ico">⏳</div><div><b>Guests wait to order</b><span>Waiting for a menu, then a waiter, then the bill. Some just leave.</span></div></div>
+    <div class="row"><div class="ico">📝</div><div><b>Wrong orders</b><span>Handwritten tickets get misread. "No onions" gets lost on the way to the kitchen.</span></div></div>
+    <div class="row"><div class="ico">🤷</div><div><b>No idea what sells</b><span>Owners can't see today's sales, best sellers or reviews in one place.</span></div></div>
+  </div>
+  <div class="foot"><span></span><span class="swipe">Swipe →</span></div>
+</section>
+
+<!-- 4. How it works -->
+<section class="slide">
+  <div class="brand"><b>QR <span>Dine</span></b><span class="count">4/9</span></div>
+  <div class="kicker">How it works</div>
+  <h2>From scan to payment, on one platform</h2>
+  <div class="list">
+    <div class="row"><div class="n">1</div><div><b>Guest scans the table QR</b><span>The digital menu opens instantly in the phone's browser.</span></div></div>
+    <div class="row"><div class="n">2</div><div><b>Orders, calls a waiter, gets WiFi</b><span>With special notes like "no onions" or "steak medium rare".</span></div></div>
+    <div class="row"><div class="n">3</div><div><b>The kitchen sees it live</b><span>New, preparing, ready. With a sound alert for every order.</span></div></div>
+    <div class="row"><div class="n">4</div><div><b>Pays and leaves a review</b><span>Online, cash at the table or at the counter. Then a quick star rating.</span></div></div>
+  </div>
+  <div class="foot"><span></span><span class="swipe">Swipe →</span></div>
+</section>
+
+<!-- 5. Guest view -->
+<section class="slide">
+  <div class="brand"><b>QR <span>Dine</span></b><span class="count">5/9</span></div>
+  <div class="kicker">For guests</div>
+  <h2>Order and track it, <span class="hl">live</span></h2>
+  <div class="phones">
+    <div class="shot" data-src="../screenshots/2-menu.png" data-size="1040,2200" data-crop="0,0,1040,1860" data-w="420"></div>
+    <div class="shot" data-src="../screenshots/3-my-orders.png" data-size="1040,2200" data-crop="0,0,1040,1860" data-w="420"></div>
+  </div>
+  <div style="margin-top:34px; display:flex; gap:16px; justify-content:center"><span class="tag good">✓ No app needed</span><span class="tag good">✓ Works on any phone</span></div>
+</section>
+
+<!-- 6. Kitchen -->
+<section class="slide">
+  <div class="brand"><b>QR <span>Dine</span></b><span class="count">6/9</span></div>
+  <div class="kicker">For the kitchen</div>
+  <h2>Orders land on the kitchen screen <span class="hl">instantly</span></h2>
+  <p class="lead">Table number, items and notes. One tap to move each order along. Waiter calls and payment requests pop up too.</p>
+  <div class="shot" style="margin-top:52px" data-src="../screenshots/4-kitchen.png" data-size="1600,1200" data-crop="10,80,1580,500" data-w="920"></div>
+  <div style="margin-top:34px; display:flex; gap:16px"><span class="tag warn">🆕 New</span><span class="tag warn">🔥 Preparing</span><span class="tag good">✓ Ready to serve</span></div>
+  <div class="foot"><span></span><span class="swipe">Swipe →</span></div>
+</section>
+
+<!-- 7. Dashboard -->
+<section class="slide">
+  <div class="brand"><b>QR <span>Dine</span></b><span class="count">7/9</span></div>
+  <div class="kicker">For the owner</div>
+  <h2>Today's sales, best sellers and reviews</h2>
+  <p class="lead">A live dashboard for the owner: every order, every payment, every table request.</p>
+  <div class="shot" style="margin-top:44px" data-src="../screenshots/5-dashboard.png" data-size="1600,1200" data-crop="268,110,1095,350" data-w="920"></div>
+  <div class="shot" style="margin-top:22px" data-src="../screenshots/5-dashboard.png" data-size="1600,1200" data-crop="268,575,1095,315" data-w="920"></div>
+</section>
+
+<!-- 8. Owner controls -->
+<section class="slide">
+  <div class="brand"><b>QR <span>Dine</span></b><span class="count">8/9</span></div>
+  <div class="kicker">Full control</div>
+  <h2>Print table QR codes in <span class="hl">one click</span></h2>
+  <p class="lead">Change prices, mark dishes sold out and manage staff. Guests see it right away.</p>
+  <div class="shot" style="margin-top:44px" data-src="../screenshots/6-tables-qr.png" data-size="1600,1200" data-crop="268,120,1095,350" data-w="920"></div>
+  <div class="chips">
+    <span class="chip">📋 Menu & prices</span><span class="chip">🚫 Sold out</span><span class="chip">🔳 QR per table</span>
+    <span class="chip">👥 Staff</span><span class="chip">⭐ Reviews</span><span class="chip">📶 WiFi</span><span class="chip">💳 Payments</span>
+  </div>
+  <div class="foot"><span></span><span class="swipe">Swipe →</span></div>
+</section>
+
+<!-- 9. CTA -->
+<section class="slide">
+  <div class="brand"><b>QR <span>Dine</span></b><span class="count">9/9</span></div>
+  <div class="kicker">Your turn</div>
+  <h2>Want this for <span class="hl">your</span> restaurant?</h2>
+  <p class="lead">Restaurants, cafés, hotels, food courts. We build it around your brand, your menu and your payment methods.</p>
+  <div class="cta"><div class="t">DM us "QRDINE"</div><div class="s">for the live demo link and access code. We build custom web apps &amp; automations.</div></div>
+  <div class="chips">
+    <span class="chip">QR ordering</span><span class="chip">Kitchen display</span><span class="chip">Online payments</span>
+    <span class="chip">Real-time sync</span><span class="chip">Any language</span><span class="chip">Your branding</span>
+  </div>
+  <div class="row" style="margin-top:40px"><div class="ico">🔗</div><div><b>Try the live demo</b><span>Link in bio. Place an order and watch it reach the kitchen.</span></div></div>
+  <div class="foot"><span>Web Apps · Automation · AI Agents</span><span></span></div>
+</section>
+
+<script>
+  // Crop a region (x,y,w,h of a screenshot of size data-size) to a display width.
+  document.querySelectorAll(".shot").forEach((el) => {
+    const [x, y, w, h] = el.dataset.crop.split(",").map(Number);
+    const [W, H] = (el.dataset.size || "1600,1200").split(",").map(Number);
+    const d = Number(el.dataset.w), k = d / w;
+    Object.assign(el.style, {
+      width: d + "px", height: Math.round(h * k) + "px",
+      backgroundImage: `url(${el.dataset.src})`,
+      backgroundSize: `${W * k}px ${H * k}px`,
+      backgroundPosition: `${-x * k}px ${-y * k}px`,
+    });
+  });
+  const n = Number(new URLSearchParams(location.search).get("s") || 1);
+  document.querySelectorAll(".slide")[n - 1].classList.add("on");
+</script>
+</body>
+</html>
