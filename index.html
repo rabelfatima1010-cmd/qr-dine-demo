@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>QR Dine · Smart Restaurant Ordering (Demo)</title>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -28,7 +30,7 @@ const ACCESS_CODE_SHA256 = 'fc1ffa57a82769b8a27d8bbcece99da62437cd4542a0cfce677e
 const DM_KEYWORD = 'QRDINE';
 // Demo limits
 const LIMITS = { tables: 5, menuItems: 15, ordersPerDay: 20 };
-const KEY = 'qrdine_demo_v2';
+const KEY = 'qrdine_demo_v4';
 
 /* ---------- helpers ---------- */
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -45,29 +47,29 @@ const CALL_LABEL = { waiter: '🙋 is calling a waiter', bill: '🧾 asked for t
 
 /* ---------- data ---------- */
 function seed() {
-  const m = (name, cat, price, emoji, desc) => ({ id: uid(), name, cat, price, emoji, desc, available: true });
+  const m = (name, cat, price, emoji, desc, img, extra = {}) => ({ id: uid(), name, cat, price, emoji, desc, img, available: true, ...extra });
   return {
-    v: 1,
+    v: 3,
     settings: { name: 'The Corner Bistro', tagline: 'Burgers · Pasta · Coffee', wifiName: 'CornerBistro_Guest', wifiPass: 'enjoy2026', currency: '$', taxPct: 0 },
     menu: [
-      m('Crispy Calamari', 'Starters', 9.5, '🦑', 'Lemon aioli & fresh herbs'),
-      m('Caesar Salad', 'Starters', 8.9, '🥗', 'Romaine, parmesan, croutons, house dressing'),
-      m('Tomato Basil Soup', 'Starters', 6.5, '🍅', 'Served with toasted sourdough'),
-      m('Classic Cheeseburger', 'Mains', 12.9, '🍔', 'Beef patty, cheddar, pickles, fries on the side'),
-      m('Margherita Pizza', 'Mains', 13.5, '🍕', 'San Marzano tomato, mozzarella, basil'),
-      m('Chicken Alfredo Pasta', 'Mains', 14.9, '🍝', 'Creamy parmesan sauce, grilled chicken'),
-      m('Grilled Salmon', 'Mains', 18.9, '🐟', 'Lemon butter, seasonal vegetables'),
-      m('Steak Frites', 'Mains', 21.5, '🥩', 'Sirloin, peppercorn sauce, crispy fries'),
-      m('Fresh Lemonade', 'Drinks', 4.5, '🍋', 'Squeezed to order'),
-      m('Cappuccino', 'Drinks', 3.9, '☕', 'Double shot, steamed milk'),
-      m('Virgin Mojito', 'Drinks', 5.5, '🍹', 'Mint, lime & soda'),
-      m('Chocolate Brownie', 'Desserts', 6.5, '🍫', 'Warm, with vanilla ice cream')
+      m('Crispy Fried Shrimp', 'Starters', 9.5, '🍤', 'Panko crust, lemon aioli', 'calamari'),
+      m('Caesar Salad', 'Starters', 8.9, '🥗', 'Romaine, parmesan, croutons, house dressing', 'salad'),
+      m('Tomato Basil Soup', 'Starters', 6.5, '🍲', 'Slow-simmered, with toasted sourdough', 'soup'),
+      m('Classic Cheeseburger', 'Mains', 12.9, '🍔', 'Beef patty, cheddar, pickles, fries on the side', 'burger', { popular: true, special: true }),
+      m('Margherita Pizza', 'Mains', 13.5, '🍕', 'San Marzano tomato, mozzarella, basil', 'pizza', { popular: true }),
+      m('Spaghetti & Meatballs', 'Mains', 14.9, '🍝', 'Rich tomato sauce, parmesan, fresh basil', 'pasta'),
+      m('Crispy Fried Chicken', 'Mains', 15.5, '🍗', 'Buttermilk-brined, with honey hot sauce', 'chicken', { popular: true }),
+      m('Fresh Lemonade', 'Drinks', 4.5, '🍋', 'Squeezed to order', 'lemon'),
+      m('Cappuccino', 'Drinks', 3.9, '☕', 'Double shot, steamed milk', 'cappuccino'),
+      m('Sunset Mocktail', 'Drinks', 5.5, '🍹', 'Orange, passion fruit & lime', 'mojito'),
+      m('Strawberry Shortcake', 'Desserts', 6.9, '🍰', 'Vanilla sponge, cream & fresh strawberries', 'cake'),
+      m('Ice Cream Sundae', 'Desserts', 6.5, '🍨', 'Three scoops, chocolate sauce, cherry on top', 'icecream')
     ],
     tables: [1, 2, 3].map(num => ({ id: uid(), num })),
     orders: [], calls: [],
     reviews: [
       { id: uid(), orderId: null, table: 2, rating: 5, text: 'The burger was amazing and ordering with the QR code was super easy!', at: Date.now() - 86400000 },
-      { id: uid(), orderId: null, table: 1, rating: 4, text: 'Quick service. The pasta could have been a little warmer.', at: Date.now() - 2 * 86400000 }
+      { id: uid(), orderId: null, table: 1, rating: 4, text: 'Quick service. The spaghetti could have been a little warmer.', at: Date.now() - 2 * 86400000 }
     ],
     staff: [
       { id: uid(), name: 'Alex Morgan', role: 'Waiter', phone: '+1 555 0101', active: true },
@@ -77,7 +79,7 @@ function seed() {
   };
 }
 function load() {
-  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return s; } catch (e) {}
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 3) return s; } catch (e) {}
   const s = seed(); localStorage.setItem(KEY, JSON.stringify(s)); return s;
 }
 let S = load();
@@ -123,22 +125,38 @@ function toast(msg) { const t = document.getElementById('toast'); t.textContent 
 /* =========================================================
    HOME
    ========================================================= */
+const D3 = n => `assets/3d/${n}.png`;
 function viewHome() {
   const n = S.tables[0]?.num || 1;
-  return `<div class="home"><div class="home-in">
-    <span class="pill">✨ Interactive demo · try everything</span>
-    ${unlocked ? '' : `<div class="notice" style="margin:16px auto 0;max-width:620px">🔒 Look around freely. To place orders and make changes, <a href="#" data-a="unlock"><b>enter the access code</b></a>. No code? DM us "${DM_KEYWORD}"${DEVELOPER.instagram ? ` on Instagram <b>@${esc(DEVELOPER.instagram)}</b>` : ''}.</div>`}
-    <h1>${esc(S.settings.name)}<br><span>Smart QR Ordering System</span></h1>
-    <p class="muted">Every table gets its own QR code. Guests scan it to see the menu, order, call a waiter, pay and leave a review, all from their phone.</p>
-    <div class="home-grid">
-      <a class="hcard" href="#/table/${n}" target="_blank"><div class="ic">📱</div><h3>Customer view</h3><p>What guests see after scanning the QR on Table ${n}</p></a>
-      <a class="hcard" href="#/kitchen" target="_blank"><div class="ic">👨‍🍳</div><h3>Kitchen screen</h3><p>Orders and waiter calls arrive live</p></a>
-      <a class="hcard" href="#/admin"><div class="ic">📊</div><h3>Owner dashboard</h3><p>Menu, prices, tables, orders, staff & sales</p></a>
-    </div>
-    <div class="feat"><span>📋 Digital menu</span><span>🛒 Table ordering</span><span>🙋 Call waiter</span><span>📶 WiFi password</span><span>👨‍🍳 Kitchen display</span><span>💳 Online / cash / counter pay</span><span>⭐ Reviews</span><span>📊 Daily sales</span></div>
-    <p class="muted small" style="margin-top:22px">Tip: open the customer view and the kitchen screen in two tabs side by side, then place an order and watch it arrive.</p>
-    <div class="card" style="margin-top:22px;text-align:center"><h3 style="margin-bottom:6px">Like what you see?</h3><p class="muted" style="margin:0 0 12px">We build a version made for your restaurant: your brand, your menu, your payment methods and any feature you need.</p><button class="btn-brand" data-a="upgrade">Get your custom version →</button></div>
-  </div></div>`;
+  return `<div class="home3">
+    <div class="blob b1"></div><div class="blob b2"></div>
+    <header class="h3-top"><div class="h3-logo"><img src="${D3('plate')}" alt="">QR <span>Dine</span></div><span class="pill">✨ Interactive demo</span></header>
+    ${unlocked ? '' : `<div class="notice h3-notice">🔒 Look around freely. To place orders and make changes, <a href="#" data-a="unlock"><b>enter the access code</b></a>. No code? DM us "${DM_KEYWORD}"${DEVELOPER.instagram ? ` on Instagram <b>@${esc(DEVELOPER.instagram)}</b>` : ''}.</div>`}
+    <section class="h3-hero">
+      <div class="h3-copy">
+        <div class="h3-kicker">Smart QR ordering for restaurants</div>
+        <h1>Scan. Order.<br><span>Enjoy.</span> <img class="h3-inline" src="${D3('fries')}" alt=""></h1>
+        <p>Every table gets its own QR code. Guests see the menu, order, call a waiter, pay and leave a review from their phone, and the kitchen gets every order instantly.</p>
+        <div class="h3-cta"><a class="abtn btn-brand" href="#/table/${n}" target="_blank">📱 Try the guest menu</a><a class="abtn btn-ghost" href="#/kitchen" target="_blank">👨‍🍳 Open kitchen screen</a></div>
+        <div class="h3-proof"><span>⚡ No app needed</span><span>🔔 Live kitchen alerts</span><span>📊 Owner dashboard</span></div>
+      </div>
+      <div class="h3-art">
+        <div class="h3-disc"></div>
+        <img class="h3-main" src="${D3('burger')}" alt="3D burger">
+        <img class="fl p1" src="${D3('pizza')}" alt=""><img class="fl p2" src="${D3('mojito')}" alt=""><img class="fl p3" src="${D3('fries')}" alt="">
+        <img class="fl p4" src="${D3('herb')}" alt=""><img class="fl p5" src="${D3('pepper')}" alt=""><img class="fl p6" src="${D3('tomato')}" alt="">
+        <div class="h3-chip c1"><img src="${D3('bell')}" alt=""><div><b>New order</b><small>Table 3 · 2× Burger</small></div></div>
+        <div class="h3-chip c2"><img src="${D3('star')}" alt=""><div><b>4.8 rating</b><small>from guests</small></div></div>
+      </div>
+    </section>
+    <section class="h3-cards">
+      <a class="h3-card" href="#/table/${n}" target="_blank" style="--tint:#ffe7da"><img src="${D3('phone')}" alt=""><h3>Guest menu</h3><p>What guests see after scanning the QR on Table ${n}</p><span>Open →</span></a>
+      <a class="h3-card" href="#/kitchen" target="_blank" style="--tint:#e3f6ea"><img src="${D3('bell')}" alt=""><h3>Kitchen screen</h3><p>Orders and waiter calls arrive live, with a sound</p><span>Open →</span></a>
+      <a class="h3-card" href="#/admin" style="--tint:#ece6ff"><img src="${D3('receipt')}" alt=""><h3>Owner dashboard</h3><p>Menu, prices, tables & QR codes, orders, staff and sales</p><span>Open →</span></a>
+    </section>
+    <p class="h3-tip">💡 Tip: open the guest menu and the kitchen screen side by side, place an order and watch it arrive.</p>
+    <section class="h3-custom"><img class="h3-cimg" src="${D3('pizza')}" alt=""><div><h3>Like what you see?</h3><p>We build a version made for your restaurant: your brand, your menu, your payment methods and any feature you need.</p></div><button class="btn-brand" data-a="upgrade">Get your custom version →</button></section>
+  </div>`;
 }
 
 /* =========================================================
@@ -146,42 +164,68 @@ function viewHome() {
    ========================================================= */
 const cust = { cat: 'All', cart: {}, tab: 'menu', table: null, note: '' };
 function cartTotal() { return Object.entries(cust.cart).reduce((a, [id, q]) => { const m = S.menu.find(x => x.id === id); return a + (m ? m.price * q : 0); }, 0); }
+// 3D picture of a menu item, or its emoji when there's none
+function thumb(m, cls = '') {
+  return m.img ? `<img class="${cls}" src="${D3(esc(m.img))}" alt="${esc(m.name)}">`
+    : `<div class="${cls} emo">${esc(m.emoji || '🍽️')}</div>`;
+}
+const CAT_3D = { All: 'plate', Starters: 'salad', Mains: 'burger', Drinks: 'mojito', Desserts: 'cake' };
+const CAT_TINT = { Starters: '#e3f6ea', Mains: '#ffe7da', Drinks: '#e3f0ff', Desserts: '#ffe6f0' };
+const tint = c => CAT_TINT[c] || '#fff1e6';
 function viewCustomer(num) {
   const table = S.tables.find(t => t.num === num);
-  if (!table) return `<div class="cust"><div class="card center" style="margin:60px 16px"><div class="bigic">🤔</div><h3>Table not found</h3><p class="muted">Please scan the QR code on your table again.</p></div></div>`;
+  if (!table) return `<div class="cust3"><div class="card center" style="margin:60px 16px"><div class="bigic">🤔</div><h3>Table not found</h3><p class="muted">Please scan the QR code on your table again.</p></div></div>`;
   if (cust.table !== num) Object.assign(cust, { table: num, cart: {}, tab: route().sub === 'orders' ? 'orders' : 'menu', cat: 'All', note: '' });
   const cats = ['All', ...new Set(S.menu.map(m => m.cat))];
   if (!cats.includes(cust.cat)) cust.cat = 'All';
   const items = S.menu.filter(m => cust.cat === 'All' || m.cat === cust.cat);
   const mine = todaysOrders().filter(o => o.table === num).sort((a, b) => b.at - a.at);
   const count = Object.values(cust.cart).reduce((a, b) => a + b, 0);
-  return `<div class="cust">
-    <div class="c-head">
-      <div class="row between"><div><div class="small op">Welcome to</div><h2>${esc(S.settings.name)}</h2><div class="small op">${esc(S.settings.tagline)}</div></div><div class="tbl">Table<br><b>${num}</b></div></div>
-      <div class="c-actions">
-        <button data-a="call" data-type="waiter">🙋 Call waiter</button>
-        <button data-a="wifi">📶 WiFi</button>
-        <button data-a="call" data-type="bill">🧾 Ask for bill</button>
-      </div>
+  const special = S.menu.find(m => m.special && m.available);
+  const catTile = c => `<button class="cat3 ${c === cust.cat ? 'on' : ''}" data-a="cat" data-v="${esc(c)}"><span class="cat3-ic" style="background:${c === 'All' ? '#fff1e6' : tint(c)}">${CAT_3D[c] ? `<img src="${D3(CAT_3D[c])}" alt="">` : '🍽️'}</span>${esc(c)}</button>`;
+  return `<div class="cust3">
+    <div class="blob b1"></div>
+    <header class="c3-top">
+      <div class="c3-brand"><div class="c3-logo"><img src="${D3('plate')}" alt=""></div><div><b>${esc(S.settings.name)}</b><small>${esc(S.settings.tagline)}</small></div></div>
+      <div class="c3-table"><small>Table</small><b>${num}</b></div>
+    </header>
+    <div class="c3-hello"><h1>Hungry? <span>Order in a tap</span></h1><img class="c3-deco d1" src="${D3('herb')}" alt=""><img class="c3-deco d2" src="${D3('tomato')}" alt=""></div>
+    <div class="c3-quick">
+      <button data-a="call" data-type="waiter"><img src="${D3('waiter')}" alt="">Call waiter</button>
+      <button data-a="wifi"><img src="${D3('wifi')}" alt="">WiFi</button>
+      <button data-a="call" data-type="bill"><img src="${D3('receipt')}" alt="">Ask for bill</button>
     </div>
-    <div class="tabs">
-      <button class="tab ${cust.tab === 'menu' ? 'on' : ''}" data-a="ctab" data-v="menu">📋 Menu</button>
-      <button class="tab ${cust.tab === 'orders' ? 'on' : ''}" data-a="ctab" data-v="orders">🧾 My orders ${mine.length ? `<span class="dot">${mine.length}</span>` : ''}</button>
+    <div class="c2-seg">
+      <button class="${cust.tab === 'menu' ? 'on' : ''}" data-a="ctab" data-v="menu">Menu</button>
+      <button class="${cust.tab === 'orders' ? 'on' : ''}" data-a="ctab" data-v="orders">My orders ${mine.length ? `<span class="dot">${mine.length}</span>` : ''}</button>
     </div>
-    ${cust.tab === 'menu'
-      ? `<div class="chips">${cats.map(c => `<button class="chip ${c === cust.cat ? 'on' : ''}" data-a="cat" data-v="${esc(c)}">${esc(c)}</button>`).join('')}</div>${items.map(itemRow).join('') || '<p class="muted center">No items yet.</p>'}`
-      : customerOrders(mine)}
+    ${cust.tab === 'menu' ? `
+      ${special && cust.cat === 'All' ? `<div class="c3-promo">
+        <div class="c3-promo-txt"><small>⭐ Chef's special</small><h3>${esc(special.name)}</h3><p>${esc(special.desc)}</p>
+          <button data-a="inc" data-id="${special.id}">Add · ${money(special.price)}</button></div>
+        <div class="c3-promo-art">${thumb(special, 'c3-promo-img')}<img class="c3-promo-fl f1" src="${D3('pepper')}" alt=""><img class="c3-promo-fl f2" src="${D3('herb')}" alt=""></div></div>` : ''}
+      <div class="c3-cats">${cats.map(catTile).join('')}</div>
+      <div class="c2-sec"><h2>${cust.cat === 'All' ? 'Full menu' : esc(cust.cat)}</h2><span>${items.length} items</span></div>
+      <div class="c3-grid">${items.map(itemCard).join('') || '<p class="muted center">No items yet.</p>'}</div>`
+      : `<div class="c2-orders">${customerOrders(mine)}</div>`}
     <div class="wm">${DEVELOPER.name ? `Powered by ${esc(DEVELOPER.name)} · ` : ''}Demo version</div>
-    ${count && cust.tab === 'menu' ? `<div class="cartbar" data-a="cart"><span><b>${count} item${count > 1 ? 's' : ''}</b> · ${money(cartTotal())}</span><b>View cart →</b></div>` : ''}
+    ${count && cust.tab === 'menu' ? `<div class="c2-cartbar" data-a="cart"><span class="n">${count}</span><span>View cart</span><b>${money(cartTotal())}</b></div>` : ''}
   </div>`;
 }
-function itemRow(m) {
+function itemCard(m) {
   const q = cust.cart[m.id] || 0;
-  const ctrl = !m.available ? '<span class="badge">Sold out</span>'
-    : q ? `<div class="qty"><button class="minus" data-a="dec" data-id="${m.id}">−</button><b>${q}</b><button data-a="inc" data-id="${m.id}">+</button></div>`
-    : `<button class="btn-brand btn-sm" data-a="inc" data-id="${m.id}">Add</button>`;
-  return `<div class="card item ${m.available ? '' : 'off'}"><div class="emoji">${esc(m.emoji || '🍽️')}</div><div class="grow"><h4>${esc(m.name)}</h4><p>${esc(m.desc)}</p><div class="price">${money(m.price)}</div></div>${ctrl}</div>`;
+  const ctrl = !m.available ? '<span class="c3-sold">Sold out</span>'
+    : q ? `<div class="qty2"><button data-a="dec" data-id="${m.id}" aria-label="Remove one">−</button><b>${q}</b><button data-a="inc" data-id="${m.id}" aria-label="Add one">+</button></div>`
+    : `<button class="add2" data-a="inc" data-id="${m.id}" aria-label="Add ${esc(m.name)}">+</button>`;
+  return `<div class="fc3 ${m.available ? '' : 'off'}" style="--tint:${tint(m.cat)}">
+    <div class="fc3-art">${thumb(m, 'fc3-img')}<i class="fc3-shadow"></i></div>
+    ${m.popular && m.available ? `<span class="fc3-tag"><img src="${D3('fire')}" alt="">Popular</span>` : ''}
+    <h4>${esc(m.name)}</h4><p>${esc(m.desc)}</p><div class="fc-row"><b>${money(m.price)}</b>${ctrl}</div>
+  </div>`;
 }
+// kept for older callers
+const itemRow = itemCard;
+
 function customerOrders(list) {
   if (!list.length) return `<div class="card center muted" style="margin:14px 16px;padding:30px">No orders yet. Pick something tasty from the menu 😋</div>`;
   return list.map(o => {
@@ -214,7 +258,7 @@ function openCart() {
   if (!lines.length) return closeModal();
   const sub = cartTotal(), tax = sub * (S.settings.taxPct || 0) / 100;
   modal(`<h3>Your order · Table ${cust.table}</h3>
-    ${lines.map(({ m, q }) => `<div class="row between cline"><div><b>${esc(m.emoji)} ${esc(m.name)}</b><div class="muted small">${money(m.price)}</div></div><div class="qty"><button class="minus" data-a="dec" data-id="${m.id}">−</button><b>${q}</b><button data-a="inc" data-id="${m.id}">+</button></div></div>`).join('')}
+    ${lines.map(({ m, q }) => `<div class="cline2">${thumb(m, 'cl-img')}<div class="grow"><b>${esc(m.name)}</b><div class="muted small">${money(m.price)}</div></div><div class="qty2"><button data-a="dec" data-id="${m.id}">−</button><b>${q}</b><button data-a="inc" data-id="${m.id}">+</button></div></div>`).join('')}
     <label>Special instructions (optional)</label><textarea id="note" rows="2" placeholder="e.g. less spicy, no onions">${esc(cust.note)}</textarea>
     <div class="sum"><div class="row between"><span>Subtotal</span><span>${money(sub)}</span></div>${tax ? `<div class="row between"><span>Tax (${S.settings.taxPct}%)</span><span>${money(tax)}</span></div>` : ''}<div class="row between big"><b>Total</b><b>${money(sub + tax)}</b></div></div>
     <button class="btn-brand full" data-a="place">Place order →</button>`, 'modal-cart');
@@ -363,7 +407,7 @@ function aMenu() {
   return `<div class="row between wrap"><div><h1>Menu</h1><p class="muted">${S.menu.length}/${LIMITS.menuItems} items in the demo · tap a status to mark an item sold out</p></div>
     <button class="btn-brand" data-a="${full ? 'upgrade' : 'editItem'}">${full ? '🔒 Item limit reached' : '+ Add item'}</button></div>
     <div class="card" style="margin-top:14px"><div class="tw"><table><thead><tr><th></th><th>Item</th><th>Category</th><th>Price</th><th>Status</th><th></th></tr></thead><tbody>
-    ${S.menu.map(m => `<tr><td class="em">${esc(m.emoji)}</td><td><b>${esc(m.name)}</b><div class="muted small">${esc(m.desc)}</div></td><td>${esc(m.cat)}</td><td class="nowrap">${money(m.price)}</td>
+    ${S.menu.map(m => `<tr><td class="em">${thumb(m, 'adm-img')}</td><td><b>${esc(m.name)}</b><div class="muted small">${esc(m.desc)}</div></td><td>${esc(m.cat)}</td><td class="nowrap">${money(m.price)}</td>
       <td><button class="badge as-btn ${m.available ? 'b-ready' : 'b-cancelled'}" data-a="toggleAvail" data-id="${m.id}">${m.available ? 'Available' : 'Sold out'}</button></td>
       <td class="nowrap"><button class="btn-sm btn-ghost" data-a="editItem" data-id="${m.id}">Edit</button> <button class="btn-sm btn-danger" data-a="delItem" data-id="${m.id}">Delete</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">No items yet.</td></tr>'}
     </tbody></table></div></div>`;
@@ -581,7 +625,7 @@ function withSample(s) {
   mk(4, 70, [it(6, 1), it(7, 1), it(9, 2)], 'served', paid('online', 'Apple Pay'));
   const o5 = mk(5, 42, [it(3, 3), it(0, 1), it(8, 3)], 'served', { method: 'cash', status: 'requested' });
   mk(1, 24, [it(4, 2), it(2, 2)], 'ready', { method: null, status: 'unpaid' });
-  mk(3, 12, [it(7, 1), it(5, 1), it(9, 2)], 'preparing', { method: null, status: 'unpaid' }, 'Steak medium rare');
+  mk(3, 12, [it(7, 1), it(5, 1), it(9, 2)], 'preparing', { method: null, status: 'unpaid' }, 'Extra crispy please');
   mk(2, 3, [it(3, 1), it(1, 1), it(8, 1)], 'new', { method: null, status: 'unpaid' }, 'No onions please');
   mk(4, 1, [it(11, 2), it(9, 2)], 'new', { method: null, status: 'unpaid' });
   s.calls.push({ id: uid(), table: 5, type: 'cash', at: min(2), done: false, orderId: o5.id }, { id: uid(), table: 3, type: 'waiter', at: min(1), done: false });

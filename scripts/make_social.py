@@ -1,5 +1,5 @@
 """Render docs/social/slides.html into Instagram slides (1080x1350 PNG) and a LinkedIn
-carousel PDF, using headless Microsoft Edge (Windows).
+carousel PDF, saved in social-media-posts/, using headless Microsoft Edge (Windows).
 
     python scripts/make_social.py
 """
@@ -14,7 +14,8 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 SOCIAL = ROOT / "docs" / "social"
-OUT = SOCIAL / "instagram"
+POSTS = ROOT / "social-media-posts"
+OUT = POSTS / "instagram"
 SLIDES = 9
 EDGE = [
     Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
@@ -49,7 +50,8 @@ def main() -> None:
         img.save(out)
         pages.append(img)
         print(f"slide-{i}.png")
-    pdf = SOCIAL / "linkedin-carousel.pdf"
+    pdf = POSTS / "linkedin" / "linkedin-carousel.pdf"
+    pdf.parent.mkdir(parents=True, exist_ok=True)
     pages[0].save(pdf, save_all=True, append_images=pages[1:], resolution=150)
     print(f"{pdf.relative_to(ROOT)} ({len(pages)} pages)")
 

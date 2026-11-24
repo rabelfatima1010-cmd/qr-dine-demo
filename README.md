@@ -34,10 +34,11 @@ A custom version for a restaurant adds real-time sync across every phone and tab
 index.html                  the whole demo (HTML, CSS link and JavaScript)
 style.css                   styles
 scripts/make_screens.py     takes docs/screenshots with headless Edge (loads sample orders)
-scripts/make_social.py      renders docs/social/slides.html into Instagram slides + LinkedIn PDF
+scripts/make_social.py      renders docs/social/slides.html into Instagram slides + LinkedIn PDF (saved in social-media-posts/)
 scripts/set_access_code.py  changes the access code
 docs/screenshots/           README and slide screenshots
-docs/social/                carousel source, Instagram PNGs, LinkedIn PDF
+docs/social/slides.html     carousel source
+social-media-posts/         ready-to-post files: instagram/, linkedin/, upwork/
 ```
 
 ## Settings (top of `index.html`)
