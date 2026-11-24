@@ -20,7 +20,6 @@ def main() -> None:
     html, n = re.subn(r"const ACCESS_CODE_SHA256 = '[0-9a-f]{64}';", f"const ACCESS_CODE_SHA256 = '{digest}';", html)
     if n != 1:
         sys.exit("Could not find ACCESS_CODE_SHA256 in index.html")
-    html = re.sub(r"// Default code: \S+ \(not case-sensitive\)", f"// Default code: {code} (not case-sensitive)", html)
     PAGE.write_text(html, encoding="utf-8")
     print(f"Access code set to {code}. Commit and push to update the live demo.")
 

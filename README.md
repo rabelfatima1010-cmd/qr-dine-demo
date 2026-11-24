@@ -45,7 +45,7 @@ docs/social/                carousel source, Instagram PNGs, LinkedIn PDF
 | Setting | What it does |
 |---|---|
 | `DEVELOPER` | Your brand name, WhatsApp number, email and Instagram handle (contact buttons, "Powered by") |
-| `ACCESS_CODE_SHA256` | Hash of the access code. Default code `QRDINE-2026`; change with `python scripts/set_access_code.py NEW-CODE` |
+| `ACCESS_CODE_SHA256` | Hash of the access code (the code itself is never stored); change with `python scripts/set_access_code.py NEW-CODE` |
 | `DM_KEYWORD` | Word visitors DM you for a code |
 | `LIMITS` | Demo limits: tables, menu items, orders per day |
 | `PUBLIC_URL` | Live demo link, used for QR codes in screenshots |

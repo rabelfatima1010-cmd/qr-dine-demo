@@ -23,8 +23,8 @@ const DEVELOPER = {
   email: ''                    // e.g. 'hello@yourbrand.com'
 };
 // Access code: anyone can look around; placing orders and editing need the code you share by DM.
-// Default code: QRDINE-2026 (not case-sensitive). Change it with: python scripts/set_access_code.py NEW-CODE
-const ACCESS_CODE_SHA256 = '1f241f913de611a5ae8435f5df28845b7f810a6c5a1b0e019c43a4129e80846f';
+// Only the code's hash is stored here (not case-sensitive). Change it with: python scripts/set_access_code.py NEW-CODE
+const ACCESS_CODE_SHA256 = 'fc1ffa57a82769b8a27d8bbcece99da62437cd4542a0cfce677ec1978c57b13e';
 const DM_KEYWORD = 'QRDINE';
 // Demo limits
 const LIMITS = { tables: 5, menuItems: 15, ordersPerDay: 20 };
