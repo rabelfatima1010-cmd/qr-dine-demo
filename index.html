@@ -17,7 +17,7 @@
    CONFIG: edit these with your own details
    ========================================================= */
 const DEVELOPER = {
-  name: 'YourBrand Digital',   // shows as "Powered by ..." and on the upgrade screen
+  name: '',                    // brand for "Powered by ..." (leave empty to show no brand)
   whatsapp: '',                // e.g. '923001234567' (country code, no + or spaces)
   instagram: '',               // e.g. 'yourbrand' (without @)
   email: ''                    // e.g. 'hello@yourbrand.com'
@@ -171,7 +171,7 @@ function viewCustomer(num) {
     ${cust.tab === 'menu'
       ? `<div class="chips">${cats.map(c => `<button class="chip ${c === cust.cat ? 'on' : ''}" data-a="cat" data-v="${esc(c)}">${esc(c)}</button>`).join('')}</div>${items.map(itemRow).join('') || '<p class="muted center">No items yet.</p>'}`
       : customerOrders(mine)}
-    <div class="wm">Powered by ${esc(DEVELOPER.name)} · Demo version</div>
+    <div class="wm">${DEVELOPER.name ? `Powered by ${esc(DEVELOPER.name)} · ` : ''}Demo version</div>
     ${count && cust.tab === 'menu' ? `<div class="cartbar" data-a="cart"><span><b>${count} item${count > 1 ? 's' : ''}</b> · ${money(cartTotal())}</span><b>View cart →</b></div>` : ''}
   </div>`;
 }
@@ -416,13 +416,19 @@ function aSettings() {
     <div class="card"><h3>Demo data</h3><p class="muted">Start fresh: clear the sample orders or reset the whole demo.</p><div class="row wrap"><button class="btn-ghost" data-a="loadSample">Load sample orders</button><button class="btn-ghost" data-a="clearToday">Clear today's orders & requests</button><button class="btn-danger" data-a="resetAll">Reset everything</button></div></div>`;
 }
 function upgradeModal() {
-  const wa = DEVELOPER.whatsapp ? `https://wa.me/${DEVELOPER.whatsapp}?text=${encodeURIComponent("Hi! I tried the QR restaurant ordering demo and I'd like a custom version for my restaurant.")}` : '';
   const rows = [['Tables', '5', 'Unlimited'], ['Menu items', '15', 'Unlimited'], ['Orders per day', '20', 'Unlimited'], ['Works across all phones & tablets', 'One device', '✓'], ['Real online payments (Stripe, PayPal, local wallets)', 'Simulated', '✓'], ['Reports & full order history', '–', '✓'], ['Your logo, colours & own domain', '–', '✓'], ['Receipt printer & WhatsApp / SMS alerts', '–', '✓'], ['Multiple branches & languages', '–', '✓'], ['Any extra feature you need', '–', '✓']];
   modal(`<div class="center"><div class="bigic">🚀</div><h2>Get your custom version</h2><p class="muted">You're using the demo. We build a version made for your restaurant, with no limits and the features you choose.</p></div>
     <div class="cmp"><div class="cmp-h"><span></span><b>Demo</b><b>Custom</b></div>${rows.map(r => `<div class="cmp-r"><span>${r[0]}</span><span>${r[1]}</span><b>${r[2]}</b></div>`).join('')}</div>
-    ${wa ? `<a class="abtn btn-brand full" href="${wa}" target="_blank" rel="noopener">💬 Contact us on WhatsApp</a>`
-      : DEVELOPER.email ? `<a class="abtn btn-brand full" href="mailto:${esc(DEVELOPER.email)}">✉️ Contact us</a>`
-      : `<p class="center muted">Contact <b>${esc(DEVELOPER.name)}</b> to get your custom version.</p>`}`);
+    ${contactButtons() || `<p class="center muted">Message us where you found this demo to get your custom version.</p>`}`);
+}
+// Every contact method that is filled in gets its own button (first one highlighted).
+function contactButtons() {
+  const msg = "Hi! I tried the QR restaurant ordering demo and I'd like a custom version for my restaurant.";
+  const links = [];
+  if (DEVELOPER.whatsapp) links.push([`https://wa.me/${DEVELOPER.whatsapp}?text=${encodeURIComponent(msg)}`, '💬 Chat on WhatsApp']);
+  if (DEVELOPER.instagram) links.push([`https://ig.me/m/${encodeURIComponent(DEVELOPER.instagram)}`, '📩 DM us on Instagram']);
+  if (DEVELOPER.email) links.push([`mailto:${DEVELOPER.email}?subject=${encodeURIComponent('Custom QR ordering app')}&body=${encodeURIComponent(msg)}`, `✉️ Email us · ${DEVELOPER.email}`]);
+  return links.map(([href, label], i) => `<a class="abtn ${i ? 'btn-ghost' : 'btn-brand'} full" href="${esc(href)}" ${href.startsWith('mailto:') ? '' : 'target="_blank" rel="noopener"'}>${esc(label)}</a>`).join('');
 }
 
 /* =========================================================
@@ -491,7 +497,7 @@ const A = {
   printQr: d => {
     const n = +d.n, w = window.open('', '_blank');
     if (!w) return toast('Please allow pop-ups to print');
-    w.document.write(`<html><head><title>Table ${n} QR</title><style>body{font-family:system-ui,sans-serif;text-align:center;padding:40px}svg{width:280px;height:280px}.t{font-size:48px;font-weight:800;margin:6px 0 16px}</style></head><body><h2>${esc(S.settings.name)}</h2><div class="t">Table ${n}</div>${qrSvg(tableUrl(n), 8)}<p style="font-size:18px">📱 Scan to see the menu, order & pay</p><p style="color:#999;font-size:12px">Powered by ${esc(DEVELOPER.name)}</p><script>onload=()=>print()<\/script></body></html>`);
+    w.document.write(`<html><head><title>Table ${n} QR</title><style>body{font-family:system-ui,sans-serif;text-align:center;padding:40px}svg{width:280px;height:280px}.t{font-size:48px;font-weight:800;margin:6px 0 16px}</style></head><body><h2>${esc(S.settings.name)}</h2><div class="t">Table ${n}</div>${qrSvg(tableUrl(n), 8)}<p style="font-size:18px">📱 Scan to see the menu, order & pay</p>${DEVELOPER.name ? `<p style="color:#999;font-size:12px">Powered by ${esc(DEVELOPER.name)}</p>` : ''}<script>onload=()=>print()<\/script></body></html>`);
     w.document.close();
   },
   editStaff: d => {
